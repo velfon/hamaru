@@ -1,7 +1,7 @@
 /**
  * Analytics Engine SQL の組み立てと応答の解析(docs/04 §4〜§6)。
  *
- * 方言は Cloudflare の SQL リファレンス(2026-09 時点)で確認した範囲だけを使う(docs/04 §11 N-3):
+ * 方言は Cloudflare の SQL リファレンス(2026-09 時点)で確認した範囲だけを使う(docs/04 §6、§10 N-3):
  * - 1 クエリ 1 テーブル。**JOIN / UNION / CTE は使えない** → 結合は TS 側(aggregate.ts)で行う
  * - 分位は `quantileExactWeighted(q)(col, w)` があるが、窓・内訳ごとにクエリが増えるので使わず、
  *   **重み付きヒストグラム**を取って TS 側で分位を求める

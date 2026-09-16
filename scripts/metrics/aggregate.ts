@@ -172,7 +172,7 @@ export function mergeSessions(rows: readonly SessionRow[]): SessionRow[] {
 
 /**
  * 重み付きヒストグラムの分位。各ビンは中央値(`(bucket + 0.5) * size`)で代表させる。
- * 総重みが 0 なら null。精度はビン幅の半分(docs/04 §11 N-4)。
+ * 総重みが 0 なら null。精度はビン幅の半分(docs/04 §10 N-4)。
  */
 export function histQuantile(
   entries: ReadonlyArray<{ bucket: number; n: number }>,

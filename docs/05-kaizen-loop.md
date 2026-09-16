@@ -283,3 +283,47 @@ Opus 5(入力 $5 / 出力 $25 per 1M tokens、2026-09 時点)。daily 1 回あ�
 - **Managed Agents への移行**: 定期デプロイ(cron)+ GitHub リポジトリ資源で同じループが Anthropic 側でホストできる。ゲートと POLICY はそのまま使える。
 - **多腕実験**: トラフィックが 1 日 5,000 install を超えたら 3 腕を許可。
 - **ユーザの声**: ゲームオーバー画面に 1 タップの「楽しかった / 難しすぎ / 簡単すぎ」を置き、テレメトリに加える(v1.1 候補、実験で導入)。
+
+## 13. 実装ノート(実装フェーズで解消した曖昧さ)
+
+### N-1. `experiment:eval` は判定だけを書き、config は変えない(§4.2 / §6.3-4)
+§6.3-4 は「promote 時に treatment を `game-config.json` に取り込む」と書くが、§4.3 と `kaizen/prompts/daily.md` は
+結論処理をエージェントの仕事としている。二重に書き換えないよう、スクリプトは `<date>-decision.json` を書くだけにした。
+取り込み・`concluded` への変更・`EXP-*.md` への結果追記は、daily エージェントが decision.json に従って行う。
+
+### N-2. 「改善」の向きは指標ごと(§6.3)
+§6.3 は「lift > 0 → promote」と書くが、`abandon_rate` は下がるのが改善。主要指標ごとに向きを持たせ、
+**p < 0.05 かつ改善方向 → promote、p < 0.05 かつ悪化方向 → rollback** とした。
+
+### N-3. 主要指標は install 単位の値に写す(§6.3)
+検定の単位は install。対応している主要指標と、install 1 件の値:
+
+| primaryMetric | install の値 | 向き |
+|---|---|---|
+| `games_per_session` | games / sessions(sessions=0 は除外) | 上 |
+| `games` | games | 上 |
+| `session_minutes_median` | 分 / sessions(中央値の install 単位近似) | 上 |
+| `abandon_rate` | abandons / games(games=0 は除外) | 下 |
+| `crash_free` | 1 − エラーのあるセッション / セッション | 上 |
+| `daily_start_rate` | デイリーを始めたら 1 | 上 |
+| `daily_completion` | 始めた install で公式記録があれば 1(始めていなければ除外) | 上 |
+| `share_rate` | shares / daily_results(0 は除外) | 上 |
+
+これ以外を `experiments.json` に書くと `experiment:eval` は **exit 1**(黙って進めない)。
+
+### N-4. ガードレール ID(§6.1 のテンプレート)
+| ID | 条件(treatment) |
+|---|---|
+| `crash_free` | ≥ control − 0.005 |
+| `median_game_seconds` | 120〜600 秒 |
+| `abandon_rate` | ≤ control + 0.03 |
+| `<指標>_min_<n>` / `<指標>_max_<n>`(指標は `crash_free` / `median_game_seconds` / `abandon_rate`) | 絶対値の下限 / 上限 |
+
+値が `null`(データ不足)のガードレールは判定不能として通す(`skipped: true` を記録)。未知の ID は exit 1。
+
+### N-5. 判定の細部
+- 対応は **control + 1 腕の 2 腕**のみ(ADR-7)。それ以外は exit 1。
+- 「install 数」は installs.json の行数(観測されたサンプル)。サンプリング時も検定は観測行で行う(一様抽出なので妥当)。
+- p 値は Welch–Satterthwaite の自由度で t 分布から計算。外部ライブラリは使わない(`scripts/experiment/stats.ts`、
+  独立に数値積分した参照値と 1e-6 の精度で一致することを単体テストで確認)。
+- `lift` は (treatment − control) / control の %、95 % 信頼区間は差の CI を control の平均で割った近似。

@@ -143,3 +143,16 @@ N-1 の表のとおり、M3 で i18n を実装したので
 加えて `npm run test:e2e`(Playwright)と `npm run budget`(`scripts/size-budget.ts`、
 [02](02-architecture.md) §9 の予算検査。`npm run build` の後に実行する)を追加した。
 `npm run metrics:pull` / `experiment:eval` / `deploy` は引き続き `echo TODO && exit 1`(M4 / M5)。
+
+### N-6. M4 のスクリプトと確認状況
+| コマンド | 内容 |
+|---|---|
+| `npm run metrics:pull -- [--days 14] [--date YYYY-MM-DD] [--dry-run]` | AE SQL → `kaizen/metrics/<date>.json`(+ 実験中は `-installs.json`) |
+| `npm run experiment:eval -- [--date YYYY-MM-DD] [--now ISO]` | `<date>-decision.json` |
+| `npm run cf:dev` | ビルドして `wrangler dev`(http://localhost:8787) |
+| `npm run cf:types` | `worker-configuration.d.ts` を再生成 |
+| `npm run deploy` | ビルドして `wrangler deploy --var APP_VERSION:$GIT_SHA` |
+
+`wrangler dev` 上で `/api/health` 200、`/api/events` 204 / 400 / 403、`_headers` の CSP と immutable、404 ページ、
+Chromium / WebKit での CSP 違反 0 件・Service Worker 登録・送信 204 を確認済み。
+**本物の Analytics Engine への書き込みと SQL API は未確認**(デプロイと API トークンが要る。M5 で確認する)。

@@ -105,75 +105,60 @@ Dataset: `hamaru_events`。Worker 側で以下に詰め替える(`worker/events.
 
 ## 6. SQL(`scripts/metrics-pull.ts` が発行する)
 
-エンドポイント: `POST https://api.cloudflare.com/client/v4/accounts/<ACCOUNT_ID>/analytics_engine/sql`、`Authorization: Bearer <TOKEN>`(Account Analytics: Read)。本文はクエリ文字列。AE の SQL は ClickHouse 方言のサブセット。**関数名は実装時に公式リファレンスで確認**する(特に分位関数)。
+エンドポイント: `POST https://api.cloudflare.com/client/v4/accounts/<ACCOUNT_ID>/analytics_engine/sql`、`Authorization: Bearer <TOKEN>`(Account Analytics: Read)。本文はクエリ文字列。
+**SQL の正本は `scripts/metrics/sql.ts`**。`npm run metrics:pull -- --dry-run` で実際に発行する SQL を表示できる。
 
-### 6.1 期間・実験ごとの基本集計
+### 6.1 方言(2026-09 に Cloudflare の SQL リファレンスで確認)
+| 項目 | 使えるもの / 使えないもの |
+|---|---|
+| 構文 | `SELECT … FROM <table> または (<subquery>) WHERE GROUP BY HAVING ORDER BY LIMIT OFFSET FORMAT`。**JOIN・UNION は不可**(1 クエリ 1 テーブル)。CTE(`WITH`)の記載なし → 使わない |
+| 集計 | `count()` `count(DISTINCT x)` `sum` `avg` `min` `max` `countIf` `sumIf` `avgIf` `argMin` `argMax` `quantileExactWeighted(q)(x, w)` `topK` |
+| 条件 | 小文字の `if(cond, a, b)` のみ(`multiIf` の記載なし) |
+| 日時 | `toDateTime` `toStartOfDay` `toStartOfInterval` `toUnixTimestamp` `formatDateTime` `now` `today`。**`toDate` は無い** |
+| 数学 | `intDiv` `floor` `ceil` `round` `log` `pow` |
+| 出力 | `FORMAT JSON` / `JSONEachRow` / `TabSeparated` |
+
+### 6.2 取得するもの(7 クエリ)
+| クエリ | 粒度 | 使い道 |
+|---|---|---|
+| セッション行 | install × session × 日 × platform × lang × 実験 | sessions / games / abandon / crash_free / daily 系 / share / install 単位の実験データ |
+| 初回日 | install(過去 90 日で初回が期間内のもの) | installs_new / d1_return |
+| 所要時間ヒストグラム | 日 × platform × lang × 実験 × 5 秒ビン | median_game_seconds |
+| スコアヒストグラム | 同 × 50 点ビン | median_score / p90_score |
+| Vitals ヒストグラム | 日 × platform × lang × 名前 × ビン(LCP 50ms / INP 8ms / CLS 0.005) | lcp_p75 / inp_p75 / cls_p75 |
+| エラー上位 | stackHash | topErrors |
+| 最新バージョン | — | version |
+
+- 日付は `toUnixTimestamp(toStartOfDay(timestamp))` で数値として受け取る(応答の日時書式に依存しない)。
+- 件数はすべて `_sample_interval` で重み付けする(セッション行は `max(_sample_interval)` を重みにする)。
+- 行が多いクエリは `ORDER BY 全キー LIMIT 10000 OFFSET n` でページングする。
+- **中央値・分位は SQL で計算しない**。窓(d1/d7/d14)・内訳(platform/lang/実験)ごとにクエリが増えるので、重み付きヒストグラムを 1 回取り、TS 側で分位を求める(精度はビン幅の半分)。
+- **D1 リターンは TS 側で結合する**(JOIN 不可のため)。初回日の一覧とセッション行を突き合わせる。
+
+例(セッション行。実物は `sql.ts`):
 ```sql
 SELECT
-  blob7  AS exp,
-  blob8  AS variant,
-  blob1  AS event,
-  SUM(_sample_interval) AS n,
-  COUNT(DISTINCT index1) AS installs
+  index1 AS install, blob2 AS session,
+  toUnixTimestamp(toStartOfDay(timestamp)) AS day,
+  blob5 AS platform, blob4 AS lang, blob7 AS exp, blob8 AS variant,
+  max(_sample_interval) AS w,
+  countIf(blob1 = 'session_start') AS starts,
+  countIf(blob1 = 'game_end' AND double7 = 0) AS games,
+  countIf(blob1 = 'game_end' AND double7 = 0 AND blob10 = 'abandon') AS abandons,
+  sumIf(double4, blob1 = 'game_end') AS game_ms,
+  countIf(blob1 = 'error') AS errors,
+  countIf(blob1 = 'game_start' AND blob9 = 'daily' AND double7 = 0) AS daily_starts,
+  countIf(blob1 = 'daily_result') AS daily_results,
+  countIf(blob1 = 'share') AS shares
 FROM hamaru_events
-WHERE timestamp >= toDateTime('2026-10-01 00:00:00')
-  AND timestamp <  toDateTime('2026-10-15 00:00:00')
-GROUP BY exp, variant, event
+WHERE timestamp >= toDateTime('2026-10-01 00:00:00') AND timestamp < toDateTime('2026-10-15 00:00:00')
+GROUP BY install, session, day, platform, lang, exp, variant
+ORDER BY install, session, day, platform, lang, exp, variant
+LIMIT 10000 OFFSET 0
+FORMAT JSONEachRow
 ```
 
-### 6.2 ゲーム指標(中央値は重み付き)
-```sql
-SELECT
-  blob8 AS variant,
-  SUM(_sample_interval) AS games,
-  quantileWeighted(0.5)(double4 / 1000, _sample_interval) AS median_game_seconds,
-  quantileWeighted(0.5)(double1, _sample_interval)        AS median_score,
-  quantileWeighted(0.9)(double1, _sample_interval)        AS p90_score,
-  SUM(_sample_interval * IF(blob10 = 'abandon', 1, 0)) / SUM(_sample_interval) AS abandon_rate
-FROM hamaru_events
-WHERE blob1 = 'game_end' AND double7 = 0
-  AND timestamp >= toDateTime('...') AND timestamp < toDateTime('...')
-GROUP BY variant
-```
-
-### 6.3 install 単位の指標(実験判定の入力)
-実験判定はユーザ(install)を単位とするため、**install ごとの集計行**を取り、統計検定はスクリプト側で行う。
-```sql
-SELECT
-  index1 AS install,
-  ANY(blob8) AS variant,
-  SUM(_sample_interval * IF(blob1 = 'session_start', 1, 0)) AS sessions,
-  SUM(_sample_interval * IF(blob1 = 'game_end' AND double7 = 0, 1, 0)) AS games,
-  SUM(_sample_interval * IF(blob1 = 'game_end', double4, 0)) / 60000 AS minutes,
-  MAX(IF(blob1 = 'error', 1, 0)) AS had_error
-FROM hamaru_events
-WHERE blob7 = 'EXP-0003'
-  AND timestamp >= toDateTime('<startedAt>')
-GROUP BY install
-```
-行数上限に注意(AE の応答上限は実装時に確認。超える場合は日付で分割して取得)。
-
-### 6.4 D1 リターン
-```sql
--- 日ごとの初回 install と翌日再訪
-WITH first_seen AS (
-  SELECT index1 AS install, MIN(toDate(timestamp)) AS d0
-  FROM hamaru_events WHERE blob1 = 'session_start'
-  GROUP BY install
-)
-SELECT d0,
-  COUNT() AS cohort,
-  SUM(returned) AS returned
-FROM (
-  SELECT f.install, f.d0,
-    MAX(IF(toDate(e.timestamp) = f.d0 + 1, 1, 0)) AS returned
-  FROM first_seen f
-  LEFT JOIN hamaru_events e ON e.index1 = f.install AND e.blob1 = 'session_start'
-  GROUP BY f.install, f.d0
-)
-GROUP BY d0 ORDER BY d0
-```
-AE が JOIN / CTE をサポートしない場合は、`first_seen` と日別 install 一覧を別クエリで取り、スクリプト側で結合する(**実装時に確認し、動く方に寄せる**)。
+**未検証**: 本物の API にはまだ一度も投げていない(本番デプロイ前でデータが無いため)。関数名・構文はリファレンスで確認済みだが、応答の数値型(文字列か数値か)と `toDateTime('…')` の文字列引数は実データで確認すること。解析側は両方に耐えるように作ってある。
 
 ## 7. 出力 JSON(`kaizen/metrics/<YYYY-MM-DD>.json`)
 
@@ -241,3 +226,26 @@ AE が JOIN / CTE をサポートしない場合は、`first_seen` と日別 ins
 ### N-2. `daily_result.dailyNo` は整数なら 0 以下も受け取る(§3)
 epoch より前の日は `dailyNo` が 0 以下になる(docs/01 §14 N-8)。Worker が 1 件でも弾くと
 バッチごと失われ `daily_completion` が欠けるので、スキーマは「整数」だけを要求する。
+
+### N-3. SQL の方言に合わせて §6 を書き直した
+設計時の §6 は ClickHouse の書き方(`quantileWeighted(0.5)(…)`、大文字の `IF`、`WITH` + `JOIN`)で、
+Analytics Engine ではそのまま動かない。リファレンスで確認した範囲だけを使う形に §6 を改めた。
+
+### N-4. 分位はヒストグラムから求める(§5 / §6)
+`median_game_seconds`(5 秒ビン)・`median_score` / `p90_score`(50 点ビン)・vitals の p75 は、
+ビンの中央値で代表させた近似値(誤差はビン幅の半分以内)。`session_minutes_median` はセッション行から直接求める。
+
+### N-5. 出力 JSON の追加項目(§7)
+§7 の形に次を足した(削除・改名はしていない)。型の正本は `scripts/metrics/report.ts` の `MetricsReport`。
+- `schemaVersion`、`date`、`sampling.maxSampleInterval`(1 を超えたらサンプリングが起きている)
+- `overall.*` / `byPlatform.*` / `byLang.*` は §5 の全指標 ID を持つ。分母が 0 の比は `null`
+- `byPlatform` / `byLang` / `vitals` は **d7 窓**
+- `byDay[]` は `date, sessions, games, installs_active, installs_new, games_per_session, crash_free, d1_return`(翌日がまだ終わっていない日は `null`)
+- `experiment` は `id, status, startedAt, days, primaryMetric, guardrails, minUsersPerArm, maxDays, arms`。
+  各 arm は `installs, sessions, games, games_per_session{mean, sd}, crash_free, median_game_seconds, abandon_rate`
+- `topErrors[]` に `nRecent`(直近 1 日)、`isNew`(初出が現行バージョン)、`rising`(直近 1 日が期間平均の 2 倍以上かつ 3 件以上)
+- 稼働中の実験があれば `<date>-installs.json`(install × variant の行)も書く。`experiment:eval` の入力
+
+### N-6. `metrics:pull` の終了コード
+認証情報が無い・API が失敗・最長の窓で session が 0 件のときは exit 1 でファイルを書かない
+(kaizen-daily はここで止まり Claude を起動しない)。成功時に `GITHUB_OUTPUT` へ `date=<YYYY-MM-DD>` を書く。
