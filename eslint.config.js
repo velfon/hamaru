@@ -47,6 +47,18 @@ export default tseslint.config(
       sourceType: "module",
       globals: { ...globals.browser, ...globals.node },
     },
+    rules: {
+      // `_` 始まりは「意図的に使わない」印(分割代入での除外など)。
+      "@typescript-eslint/no-unused-vars": [
+        "error",
+        {
+          argsIgnorePattern: "^_",
+          varsIgnorePattern: "^_",
+          caughtErrorsIgnorePattern: "^_",
+          ignoreRestSiblings: true,
+        },
+      ],
+    },
   },
   {
     files: ["src/core/**/*.ts"],

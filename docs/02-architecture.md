@@ -331,3 +331,26 @@ npm run deploy  = wrangler deploy --var APP_VERSION:$GIT_SHA
 - AE には IP を書かない。国コードのみ。
 - 依存は `npm audit --audit-level=high` を CI で実行。
 - 改善エージェントは `worker/`, `.github/`, `package.json` を**変更できない**(05 のポリシー + CI の変更パス検査)。
+
+## 11. 実装ノート(実装フェーズで解消した曖昧さ)
+
+### N-1. `ResolvedConfig` の *型* は `src/core/types.ts` に置く(§2 / §3)
+§2 は「core は何も import しない(型と自身のみ)」と定めるが、
+§3 の `newGame(config: ResolvedConfig, ...)` は config 層の型を要求する。
+依存方向を守るため、**`ResolvedConfig` とその構成要素の型は core に置き**、
+`src/config/schema.ts` の zod スキーマがその型に一致することを
+`parseGameConfig(input): ResolvedConfig` の戻り型で**コンパイル時に**検証する。
+(スキーマの推論型が core の契約からずれた瞬間に `npm run typecheck` が落ちる。)
+
+eslint の `no-restricted-imports` は `src/core/**` に対して
+「`./` で始まる相対 import 以外すべて禁止」という正規表現で強制している。
+
+### N-2. `resolveConfig` の失敗通知は `onError` コールバック(§4.4)
+§4.4 は「再検証に失敗したら base にフォールバックし `error` イベントを送る」とあるが、
+config 層は telemetry を import できない(§2 の依存方向)。
+そこで `resolveConfig(base, experiments, installId, mode, onError?)` の
+第 5 引数に通知用コールバックを受け、送信の責務は呼び出し側(UI / telemetry)に置いた。
+
+### N-3. `serialize` の base64 は core 内の自前実装(§3)
+`btoa` はブラウザ固有、`Buffer` は Node 固有で、どちらも core の純粋性に反する。
+`game.ts` に依存のない base64 エンコーダ / デコーダ(`encodeBoard` / `decodeBoard`)を実装した。
