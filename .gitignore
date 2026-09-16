@@ -10,3 +10,6 @@ coverage/
 dev-dist/
 .claude/
 .lighthouseci/
+
+# install 単位の行は公開リポジトリに載せない(集計値だけをコミットする。docs/04 §10 N-7)
+kaizen/metrics/*-installs.json

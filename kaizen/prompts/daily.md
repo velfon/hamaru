@@ -39,7 +39,8 @@ POLICY の優先順位:
 - **直接改善**: 変更 → `docs/` の該当箇所を同じ PR で更新
 - `kaizen/CHANGELOG.md` に 1 行: `<DATE> | <種類> | 何を | なぜ | 期待指標 | —`
 - `kaizen/BACKLOG.md` を更新(着手したものを `doing`、新しい気づきを追加、ICE を見直す)
-- `kaizen/metrics/<DATE>*.json` もコミットに含める(日記として残す)
+- `kaizen/metrics/<DATE>.json` と `kaizen/metrics/<DATE>-decision.json` をコミットに含める(日記として残す)。
+  `<DATE>-installs.json` は install 単位のデータなので**コミットしない**(.gitignore 済み。公開リポジトリのため)
 
 ## 3. 検証(全部通るまで直す。3 回で通らなければ変更を捨てる)
 ```

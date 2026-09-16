@@ -249,3 +249,8 @@ Analytics Engine ではそのまま動かない。リファレンスで確認し
 ### N-6. `metrics:pull` の終了コード
 認証情報が無い・API が失敗・最長の窓で session が 0 件のときは exit 1 でファイルを書かない
 (kaizen-daily はここで止まり Claude を起動しない)。成功時に `GITHUB_OUTPUT` へ `date=<YYYY-MM-DD>` を書く。
+
+### N-7. install 単位の行はコミットしない(§8 プライバシー)
+リポジトリは public なので、`kaizen/metrics/` にコミットするのは集計値(`<date>.json`)と判定(`<date>-decision.json`)だけ。
+実験判定の入力 `<date>-installs.json`(install ID ごとの行)は `.gitignore` に入れ、ワークフローの実行中だけ使う。
+Actions の artifact からも除外する(public リポジトリの artifact は GitHub アカウントがあれば誰でも取得できるため)。

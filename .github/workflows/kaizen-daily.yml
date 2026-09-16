@@ -75,7 +75,10 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: metrics-${{ github.run_id }}
-          path: kaizen/metrics
+          # install 単位の行は artifact にも残さない(public リポジトリの artifact は誰でも取得できる)
+          path: |
+            kaizen/metrics
+            !kaizen/metrics/*-installs.json
           retention-days: 30
 
       - if: steps.open.outputs.count == '0'
