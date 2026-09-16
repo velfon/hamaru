@@ -1,0 +1,232 @@
+# 品質ゲート G1〜G8(docs/06 §1)。PR の必須チェック。
+# ジョブ名(check / unit / golden / sim / e2e / budget / change-class / audit)はブランチ保護の必須チェック名になる。
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  CI: "true"
+
+jobs:
+  check:
+    name: check
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      # G1: config 検証(全実験 × 全バリアント × 両モード)・型・lint・i18n・整形
+      - run: npm run check
+      - run: npm run format:check
+
+  unit:
+    name: unit
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      # G2: 単体テスト + src/core の行カバレッジ 95 %
+      - run: npm run test:coverage
+
+  golden:
+    name: golden
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      # G3: 決定性(デイリーの公平性)。golden の更新は「golden: update」ラベル付き PR のみ(G7 が検査)
+      - run: npx vitest run tests/unit/golden.test.ts
+
+  sim:
+    name: sim
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      # G4: 既定 config で帯域検査
+      - run: npm run sim -- --games 2000 --bots random,greedy,lookahead --seed 1 --check
+      # 稼働中の実験があれば各バリアントも走らせる(明らかな破壊だけを落とす。docs/06 §9 N-10)
+      - name: sim (running experiment variants)
+        run: |
+          variants=$(node -e '
+            const f = require("./src/config/experiments.json");
+            const e = f.experiments.find((x) => x.status === "running");
+            if (e) console.log(Object.keys(e.variants).filter((v) => v !== "control").join(" "));
+          ')
+          if [ -z "$variants" ]; then echo "稼働中の実験はありません"; exit 0; fi
+          for v in $variants; do
+            echo "::group::variant $v"
+            npm run sim -- --games 2000 --bots random,greedy,lookahead --seed 1 --variant "$v" --check
+            echo "::endgroup::"
+          done
+
+  e2e:
+    name: e2e
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      # G5: CI は Chromium のみ(Pixel 7 / Desktop Chrome)。WebKit は e2e-weekly.yml
+      - run: npm run test:e2e
+      - if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: playwright-report-${{ github.run_id }}
+          path: |
+            playwright-report
+            test-results
+          retention-days: 7
+
+  budget:
+    name: budget
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      # G6: サイズ予算 + Lighthouse CI(モバイル perf / a11y ≥ 0.95、LCP ≤ 1.5 秒)
+      - run: npm run build
+      - run: npm run budget
+      - run: npx -y @lhci/cli@0.15.1 autorun
+      - if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: lighthouse-${{ github.run_id }}
+          path: .lighthouseci
+          retention-days: 7
+
+  change-class:
+    name: change-class
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      # G7: 変更クラス。PR ではラベルと作者を読み、改善エージェントの human-only 変更等を落とす。
+      # push(main)では直前のコミットとの差分を表示だけする。
+      - name: classify
+        env:
+          KAIZEN_BOT_LOGINS: ${{ vars.KAIZEN_BOT_LOGINS }}
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            npx tsx scripts/change-class.ts
+          else
+            npx tsx scripts/change-class.ts --base "${{ github.event.before || 'HEAD~1' }}" --head "${{ github.sha }}" --author "${{ github.actor }}" || true
+          fi
+
+  audit:
+    name: audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      # G8: 依存の脆弱性(high 以上で失敗)
+      - run: npm audit --audit-level=high
+
+  preview:
+    name: preview
+    # 同じリポジトリからの PR だけ(フォークにはシークレットが渡らない)。ゲートではない。
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - name: check secrets
+        id: secrets
+        env:
+          TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          if [ -z "$TOKEN" ]; then
+            echo "::notice::CLOUDFLARE_API_TOKEN が未設定なのでプレビューを作りません"
+            echo "ok=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ok=true" >> "$GITHUB_OUTPUT"
+          fi
+      - if: steps.secrets.outputs.ok == 'true'
+        run: npm ci
+      - if: steps.secrets.outputs.ok == 'true'
+        name: upload preview version
+        id: upload
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          PR: ${{ github.event.pull_request.number }}
+          SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          npm run build
+          # プレビューは本番の指標に書き込まない(TELEMETRY=off。docs/02 §11 N-11)
+          npx wrangler versions upload \
+            --preview-alias "pr-${PR}" \
+            --tag "pr-${PR}" \
+            --message "PR #${PR} ${SHA:0:7}" \
+            --var "APP_VERSION:pr-${PR}-${SHA:0:7}" \
+            --var "TELEMETRY:off" | tee upload.log
+          url=$(grep -oE "https://pr-${PR}-[a-z0-9.-]+\.workers\.dev" upload.log | head -1 || true)
+          echo "url=${url}" >> "$GITHUB_OUTPUT"
+      - if: steps.secrets.outputs.ok == 'true' && steps.upload.outputs.url != ''
+        name: comment preview URL
+        env:
+          GH_TOKEN: ${{ github.token }}
+          URL: ${{ steps.upload.outputs.url }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          body="プレビュー: ${URL}(テレメトリは送信されますが保存されません)"
+          gh pr comment "$PR" --repo "${{ github.repository }}" --edit-last --body "$body" \
+            || gh pr comment "$PR" --repo "${{ github.repository }}" --body "$body"

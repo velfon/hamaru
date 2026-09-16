@@ -1,0 +1,35 @@
+# 週次 E2E: CI では回さない WebKit(iPhone 15)を含む全プロジェクト(docs/06 §5)。
+name: E2E weekly
+
+on:
+  schedule:
+    - cron: "0 20 * * 6" # 日曜 05:00 JST
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  e2e-all:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      CI: "true"
+      E2E_ALL_BROWSERS: "true"
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium webkit
+      - run: npm run test:e2e
+      - if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: playwright-weekly-${{ github.run_id }}
+          path: |
+            playwright-report
+            test-results
+          retention-days: 14

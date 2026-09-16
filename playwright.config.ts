@@ -15,6 +15,8 @@ export const DEV_URL = `http://localhost:${DEV_PORT}`;
 export const PREVIEW_URL = `http://localhost:${PREVIEW_PORT}`;
 
 const isCI = process.env["CI"] === "true" || process.env["CI"] === "1";
+/** 週次ワークフロー(e2e-weekly.yml)は WebKit を含む全プロジェクトを回す。 */
+const allBrowsers = process.env["E2E_ALL_BROWSERS"] === "true";
 
 const projects = [
   { name: "Pixel 7", use: { ...devices["Pixel 7"] } },
@@ -38,7 +40,7 @@ export default defineConfig({
     trace: "on-first-retry",
     video: "off",
   },
-  projects: isCI ? projects.filter((p) => p.name !== "iPhone 15") : projects,
+  projects: isCI && !allBrowsers ? projects.filter((p) => p.name !== "iPhone 15") : projects,
   webServer: [
     {
       command: `npm run dev -- --port ${DEV_PORT} --strictPort`,
