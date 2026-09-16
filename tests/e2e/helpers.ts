@@ -90,15 +90,34 @@ async function pieceSize(page: Page, slot: number): Promise<{ w: number; h: numb
   }, slot);
 }
 
-/**
- * トレイのピースを盤の (x, y)(= バウンディングボックスの左上)へドラッグする。
+/*
  * ドラッグ中のピースは「中心がポインタに追従する」ので、着地セル群の中心を狙う。
- *
  * すべてのプロジェクトで `page.mouse` を使う(モバイル端末エミュレーションでも
  * Pointer Events は発火する。タッチ持ち上げオフセットは pointerType 依存なので
- * ここでは 0 のまま動く)。
+ * ここでは 0 のまま動く。docs/06 §9 N-8)。
  */
-export async function dragPiece(page: Page, slot: number, x: number, y: number): Promise<void> {
+
+/** CSS / Web フォントが効いた実寸になるまで待つ(dev サーバの初回起動対策)。 */
+export async function waitForBoardLayout(page: Page): Promise<void> {
+  await page.waitForFunction(() => {
+    const cell = document.querySelector("#c-0-0");
+    return cell !== null && cell.getBoundingClientRect().width > 8;
+  });
+  await page.evaluate(() => document.fonts.ready.then(() => undefined));
+}
+
+/**
+ * ピースを掴んで (x, y) の上まで運ぶ。戻り値を呼ぶと離す。
+ * 各段階で**アプリ側の状態**(ドラッグ中のピース / ゴースト)を待ってから次へ進むので、
+ * 実行環境が遅くてもタイミングで落ちない。
+ */
+export async function grabPiece(
+  page: Page,
+  slot: number,
+  x: number,
+  y: number,
+): Promise<() => Promise<void>> {
+  await waitForBoardLayout(page);
   const { w, h } = await pieceSize(page, slot);
   const from = await page.getByTestId(`slot-${slot}`).boundingBox();
   const first = await page.locator(`#c-${x}-${y}`).boundingBox();
@@ -112,8 +131,24 @@ export async function dragPiece(page: Page, slot: number, x: number, y: number):
   };
   await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2);
   await page.mouse.down();
+  // 掴めたこと(ドラッグ中のピースが出たこと)を確認してから運ぶ。
+  await page.locator(".dragpiece").waitFor({ state: "attached" });
   await page.mouse.move(target.x, target.y, { steps: 8 });
-  await page.mouse.up();
+  // 置ける位置だとアプリが判断した(= ゴーストが出た)ことを確認する。
+  await page.locator("[data-ghost]").first().waitFor({ state: "attached" });
+
+  return async () => {
+    await page.mouse.up();
+    await page.locator(".dragpiece").waitFor({ state: "detached" });
+  };
+}
+
+/**
+ * トレイのピースを盤の (x, y)(= バウンディングボックスの左上)へドラッグして置く。
+ */
+export async function dragPiece(page: Page, slot: number, x: number, y: number): Promise<void> {
+  const drop = await grabPiece(page, slot, x, y);
+  await drop();
 }
 
 /** テレメトリのメモリ内キュー(開発ビルドのみ公開。M4 で送信になる)。 */

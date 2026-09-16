@@ -136,3 +136,10 @@ CI(M5)の `check` ジョブは `npm run check && npm run format:check` の 2 コ
 ### N-4. M0 で作るディレクトリは M0〜M2 で必要なものだけ
 02 §2 のツリーのうち、`src/ui`・`src/telemetry`・`src/storage`・`src/i18n`・`worker/`・
 `.github/` などは中身のあるファイルを作る M3 以降で追加する(空ディレクトリは git に載らないため)。
+
+### N-5. M3 で `check` に `i18n:check` が入り、`test:e2e` / `budget` が生えた
+N-1 の表のとおり、M3 で i18n を実装したので
+`npm run check = validate:config && typecheck && lint && i18n:check` になった。
+加えて `npm run test:e2e`(Playwright)と `npm run budget`(`scripts/size-budget.ts`、
+[02](02-architecture.md) §9 の予算検査。`npm run build` の後に実行する)を追加した。
+`npm run metrics:pull` / `experiment:eval` / `deploy` は引き続き `echo TODO && exit 1`(M4 / M5)。

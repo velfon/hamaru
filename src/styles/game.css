@@ -8,7 +8,13 @@
 
 .game {
   --n: 10;
+  /* ヘッダ(= スコア行)+ トレイ + 余白を引いた残りに収める。docs/03 §4 */
   --board: min(100vw - 2 * var(--gutter), 100dvh - var(--header-h) - var(--tray-h) - 24px, 520px);
+  /* ゲーム画面はスクロールしない(盤とトレイが必ず画面内に収まる) */
+  height: 100dvh;
+  min-height: 0;
+  overflow: hidden;
+  padding-bottom: calc(8px + env(safe-area-inset-bottom));
   --unit: calc(var(--board) / (var(--n) * 1.08 + 0.08));
   --grout: calc(var(--unit) * 0.08);
   --tile-radius: calc(var(--unit) * 0.14);
@@ -20,18 +26,31 @@
 /* ------------------------------------------------------------------ */
 
 .hud {
+  height: var(--header-h);
   display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
+  align-items: center;
   gap: 12px;
   flex: none;
-  padding-bottom: 8px;
+}
+
+.hud .iconbtn {
+  margin-left: -10px;
+  flex: none;
+}
+
+.hud__meta {
+  margin-left: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
 }
 
 .hud__scores {
   display: flex;
   align-items: baseline;
   gap: 16px;
+  min-width: 0;
 }
 
 .stat__label {
@@ -66,6 +85,7 @@
 }
 
 .streakbadge {
+  align-self: flex-end;
   font-family: var(--font-display);
   font-weight: 700;
   font-size: var(--fs-small);
@@ -91,6 +111,7 @@
   flex: 1;
   display: flex;
   flex-direction: column;
+  /* 盤とトレイを 1 組として、残りの高さの中央に置く(間は 16px 固定。docs/03 §4)。 */
   justify-content: center;
   min-height: 0;
 }

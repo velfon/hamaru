@@ -3,7 +3,7 @@
  * 言語切替で文言が変わる / テーマ切替 / データ削除で統計が 0。
  */
 import { expect, test } from "@playwright/test";
-import { dragPiece } from "./helpers";
+import { dragPiece, grabPiece } from "./helpers";
 
 test("言語を切り替えると文言が変わり、再読み込みしても残る", async ({ page }) => {
   await page.goto("/#/settings");
@@ -47,15 +47,10 @@ test("消去プレビューを OFF にするとハイライトが出ない", asy
   await page.getByTestId("setting-preview").uncheck();
 
   await page.goto("/#/play");
-  const slot = await page.getByTestId("slot-0").boundingBox();
-  const cell = await page.locator("#c-4-4").boundingBox();
-  if (slot === null || cell === null) throw new Error("要素が見つかりません");
-  await page.mouse.move(slot.x + slot.width / 2, slot.y + slot.height / 2);
-  await page.mouse.down();
-  await page.mouse.move(cell.x + cell.width / 2, cell.y + cell.height / 2, { steps: 6 });
+  const drop = await grabPiece(page, 0, 4, 4);
   await expect(page.locator("[data-ghost]").first()).toBeVisible();
   await expect(page.locator('[data-preview="1"]')).toHaveCount(0);
-  await page.mouse.up();
+  await drop();
 });
 
 test("データを削除すると統計が 0 に戻る", async ({ page }) => {

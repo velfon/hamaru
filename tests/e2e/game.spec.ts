@@ -7,8 +7,10 @@ import {
   almostFullRow,
   dragPiece,
   gotoState,
+  grabPiece,
   makeState,
   telemetryEvents,
+  waitForBoardLayout,
 } from "./helpers";
 
 test("smoke: ホーム → エンドレス → ピースを置くとスコアが増える", async ({ page }, info) => {
@@ -152,12 +154,15 @@ test.describe("reduced-motion", () => {
 
 test("盤外にドロップするとキャンセルされる(docs/01 §8.1)", async ({ page }) => {
   await gotoState(page, makeState({ tray: [{ shapeId: "dot" }, null, null] }), "/play");
+  await waitForBoardLayout(page);
   const slot = await page.getByTestId("slot-0").boundingBox();
   if (slot === null) throw new Error("slot が見つかりません");
 
   await page.mouse.move(slot.x + slot.width / 2, slot.y + slot.height / 2);
   await page.mouse.down();
+  await page.locator(".dragpiece").waitFor({ state: "attached" });
   await page.mouse.move(5, 5, { steps: 6 });
+  await expect(page.locator("[data-ghost]")).toHaveCount(0);
   await page.mouse.up();
 
   await expect(page.getByTestId("score")).toHaveText("0");
@@ -170,14 +175,8 @@ test("消去プレビュー: 置くと消える行が下塗りされる(docs/01 
     makeState({ board: almostFullRow(), tray: [{ shapeId: "dot" }, null, null] }),
     "/play",
   );
-  const slot = await page.getByTestId("slot-0").boundingBox();
-  const cell = await page.locator("#c-9-9").boundingBox();
-  if (slot === null || cell === null) throw new Error("要素が見つかりません");
-
-  await page.mouse.move(slot.x + slot.width / 2, slot.y + slot.height / 2);
-  await page.mouse.down();
-  await page.mouse.move(cell.x + cell.width / 2, cell.y + cell.height / 2, { steps: 8 });
+  const drop = await grabPiece(page, 0, 9, 9);
   await expect(page.locator('[data-preview="1"]')).toHaveCount(10);
-  await page.mouse.up();
+  await drop();
   await expect(page.locator('[data-preview="1"]')).toHaveCount(0);
 });

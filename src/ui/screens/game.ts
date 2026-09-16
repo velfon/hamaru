@@ -227,7 +227,9 @@ export function gameScreen(mode: Mode) {
       isPractice ? ` · ${t("game.practice")}` : "",
     ]);
 
+    // ヘッダはワイヤ(docs/01 §9.2)どおり 1 行。← / スコア / ベスト / モードとストリーク。
     const hud = el("div", { class: "hud" }, [
+      back,
       el("div", { class: "hud__scores" }, [
         el("div", { class: "stat stat--score" }, [
           el("span", { class: "stat__label" }, [t("game.score")]),
@@ -238,15 +240,11 @@ export function gameScreen(mode: Mode) {
           bestValue,
         ]),
       ]),
-      streakBadge,
+      el("div", { class: "hud__meta" }, [modeTag, streakBadge]),
     ]);
 
     const play = el("div", { class: "game__play" }, [boardView.root, trayView.root]);
-    const screen = el("div", { class: "screen game", "data-testid": "game-screen" }, [
-      el("div", { class: "topbar" }, [back, el("div", { class: "topbar__spacer" }), modeTag]),
-      hud,
-      play,
-    ]);
+    const screen = el("div", { class: "screen game", "data-testid": "game-screen" }, [hud, play]);
     container.appendChild(screen);
 
     let overlay: HTMLElement | null = null;

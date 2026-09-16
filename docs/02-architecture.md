@@ -354,3 +354,21 @@ config 層は telemetry を import できない(§2 の依存方向)。
 ### N-3. `serialize` の base64 は core 内の自前実装(§3)
 `btoa` はブラウザ固有、`Buffer` は Node 固有で、どちらも core の純粋性に反する。
 `game.ts` に依存のない base64 エンコーダ / デコーダ(`encodeBoard` / `decodeBoard`)を実装した。
+
+### N-4. UI 層に 1 ファイルだけ追加(`src/ui/dom.ts`)(§2)
+フレームワークを使わない方針(§1)で 5 画面を書くと `document.createElement` の定型が
+全画面に散るため、要素生成・inline SVG・`{name}` 差し替えだけの薄いヘルパを
+`src/ui/dom.ts` に切り出した(依存は増やしていない)。
+また §2 のツリーには「アプリ全体で共有する状態(install / 解決済み config / 実験割り当て)」の
+置き場が無いので、購読対象(設定・統計)と一緒に `src/ui/store.ts` に置いた。
+
+### N-5. PWA は `clientsClaim` を有効にする(§1)
+`registerType: "autoUpdate"` の既定では初回訪問のタブが SW に制御されず、
+「登録した直後にオフラインにするとリロードで落ちる」状態になる。
+`workbox.clientsClaim: true` を足して初回から制御させ、E2E(06 §5 `offline`)で担保した。
+開発サーバでは SW を登録しない(`devOptions.enabled: false`)。
+
+### N-6. 初回 JS の内訳(§9)
+M3 時点で JS 43.9 KB gzip(予算 60 KB)。うち約 6 割が zod(config / experiments の
+実行時検証)で、残りが UI + core。将来 60 KB に迫ったら、まず zod を
+「起動時は検証しない(ビルド時の `validate:config` に任せる)」形へ動かすのが効く。

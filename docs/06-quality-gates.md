@@ -135,3 +135,27 @@ npm run sim -- --games 2000 --bots random,greedy,lookahead --seed 1 [--config pa
 `random` ボットの選択に `GameState.rng` を使うと出題列が乱れるため、
 ゲームごとに `bot:<gameSeed>` で初期化した別の乱数器を使う。
 同じ `--seed` なら全ボットが同じ出題列に直面し、結果は完全に再現する。
+
+### N-5. `telemetry` シナリオは M3 ではメモリ内キューを見る(§5)
+§5 は「`/api/events` へのリクエストに `game_start` / `game_end` が含まれ、スキーマ検証を通る」と定めるが、
+送信そのものは M4 の担当([07](07-implementation-plan.md) §1)。M3 の `track()` はメモリ内キューだけなので、
+E2E は開発ビルドで公開している `window.__hamaru.telemetry()` を読み、
+**イベント名・発火タイミング・[04](04-telemetry-and-metrics.md) §2 の共通フィールド**を検査する。
+M4 で輸送を実装したら、同じ spec に `page.route` でのリクエスト捕捉を足す(検査対象は変わらない)。
+
+### N-6. `offline` シナリオだけ本番ビルドに対して実行する(§5)
+開発サーバはモジュールを都度配信するため precache の検証にならない。
+Playwright の `webServer` を 2 つ(`vite dev` = 5173 / `vite preview` = 4173)立て、
+`offline` と manifest の検査だけ 4173 を見る。他のシナリオはテスト用の `?state=` が必要なので 5173。
+Service Worker の制御は Chromium のみで検査する(WebKit は §5 の「週次」に回す)。
+
+### N-7. `?state=` は 1 回だけ効く(§5)
+差し込んだ状態がそのまま URL に残り続けると、「はじめから」やリロードのたびに同じ状態へ戻ってしまう。
+読み取った直後に `history.replaceState` で `state` パラメータを消し、
+**初期状態の差し込み**としてだけ働くようにした(開発ビルド限定なのは §5 のとおり)。
+
+### N-8. E2E のドラッグは常に `page.mouse`(§5)
+Pixel 7 / iPhone 15 のエミュレーションでも Pointer Events は発火するため、
+ドラッグ補助(`tests/e2e/helpers.ts`)はマウスで統一している。
+このため `config.input.touchLiftOffset`(指の上にピースを持ち上げる量)は E2E では効かず、
+**実機のタッチ操作は手動確認**に残る(§5 のデバイス一覧は画面サイズの検証として機能している)。
