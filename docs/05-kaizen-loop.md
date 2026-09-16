@@ -327,3 +327,28 @@ Opus 5(入力 $5 / 出力 $25 per 1M tokens、2026-09 時点)。daily 1 回あ�
 - p 値は Welch–Satterthwaite の自由度で t 分布から計算。外部ライブラリは使わない(`scripts/experiment/stats.ts`、
   独立に数値積分した参照値と 1e-6 の精度で一致することを単体テストで確認)。
 - `lift` は (treatment − control) / control の %、95 % 信頼区間は差の CI を control の平均で割った近似。
+
+### N-6. 自動マージは CI 完了を起点にし、マージ後にデプロイを明示的に起動する(§5 / §7)
+GitHub の仕様で、**GITHUB_TOKEN で行った操作(マージ・push・PR 作成)は他のワークフローを起動しない**。
+§5 の「`gh pr merge --auto` → main への push で deploy.yml」はこのため動かない。実装は次の形:
+1. 改善エージェントの PR は **Claude GitHub App** 名義(`claude[bot]`)で作られるので CI は通常どおり走る。
+2. `kaizen-gate.yml` は `workflow_run`(CI 完了)で起動し、**main のスクリプト**で PR の差分を判定する(PR のコードは実行しない)。
+   head sha が一致し、`kaizen` ラベルがあり、`change-class` が自動マージ可で、`vars.KAIZEN_AUTOMERGE == 'true'` のときだけ
+   `gh pr merge --squash --match-head-commit` し、続けて `gh workflow run deploy.yml`(workflow_dispatch は例外として起動する)。
+3. それ以外は `class:<クラス>` と `needs-human` のラベル、理由のコメント(同じ head sha には 1 回だけ)。
+
+### N-7. canary は deploy.yml の後続ジョブ。異常時はまず本番を wrangler rollback で戻す(§7.3)
+§7.3 の `canary.yml`(`workflow_run`)は、起点のデプロイが GITHUB_TOKEN 由来だと起動しない恐れがあるので、
+deploy.yml の `canary` ジョブ(`needs: deploy`)にした。30 分待って `npm run canary` で判定し、
+`rollback` なら **`wrangler rollback --yes` で本番を直前の版へ即座に戻す**。そのうえで revert ブランチと PR、Issue を作る。
+revert PR は GITHUB_TOKEN 名義なので CI が自動では走らない(`needs-human`)。本番はすでに戻っているので急がなくてよい。
+判定規則は `scripts/canary.ts`(エラーのあった session ≥ 20 かつ率が直前 24 時間の 3 倍超、基準率の下限 0.1 %、直近に session が無ければ skip)。
+
+### N-8. 改善エージェントの認証とツール(§7.1)
+- 認証は `ANTHROPIC_API_KEY` か `CLAUDE_CODE_OAUTH_TOKEN`(どちらか一方)。GitHub 側は Claude GitHub App をリポジトリに入れる。
+- `--model claude-opus-5`、daily は `--max-turns 80`、weekly は 40。
+- `--allowedTools` は Read / Write / Edit / Glob / Grep と、`npm run` / `npm test` / `npx vitest` / `npx playwright test`、
+  git の status / diff / log / switch / restore / clean / add / commit / push、gh の pr create / list / view と issue create / list / comment、`date` のみ。
+  **`gh pr merge` と任意の `node` / `curl` は許可しない**。`git push` は許可するので、main への直接 push を防ぐのは**ブランチ保護**(必須)。
+- 未マージの `kaizen` PR が残っていれば、その日は metrics を取らずに終わる(1 日 1 PR、積み上げない)。
+- 週次の数字は `scripts/kaizen-digest.ts` が草稿に書き、エージェントは解釈だけを書く。

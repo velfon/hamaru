@@ -1,0 +1,55 @@
+# 週次レトロとダイジェスト(docs/05 §7.2)。
+name: Kaizen weekly
+
+on:
+  schedule:
+    - cron: "0 19 * * 0" # 月曜 04:00 JST
+  workflow_dispatch:
+
+concurrency:
+  group: kaizen
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+  id-token: write
+
+jobs:
+  weekly:
+    if: vars.KAIZEN_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      # daily が前日までに書いた metrics(main にマージ済み)から草稿を作る。当日分が無ければ直近の日で作る。
+      - name: digest draft
+        id: digest
+        run: |
+          latest=$(ls kaizen/metrics | grep -E '^[0-9]{4}-[0-9]{2}-[0-9]{2}\.json$' | sort | tail -1 | cut -c1-10)
+          npm run kaizen:digest -- --date "${latest:-$(date -u +%F)}"
+      - uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          prompt: |
+            REPO: ${{ github.repository }}
+            WEEK: ${{ steps.digest.outputs.week }}
+            You are the weekly retrospective agent for the HAMARU puzzle game.
+            First read kaizen/POLICY.md. Then follow kaizen/prompts/weekly.md step by step.
+            The numbers are already in kaizen/retro/${{ steps.digest.outputs.week }}.draft.md. Do not change them.
+            Never merge a pull request. Never push to main.
+          claude_args: |
+            --model claude-opus-5
+            --max-turns 40
+            --allowedTools "Read,Write,Edit,Glob,Grep,Bash(npm run check:*),Bash(npm run format:*),Bash(git status:*),Bash(git diff:*),Bash(git log:*),Bash(git switch:*),Bash(git add:*),Bash(git commit:*),Bash(git push:*),Bash(gh pr create:*),Bash(gh pr list:*),Bash(gh issue create:*),Bash(gh issue list:*),Bash(date:*)"

@@ -1,0 +1,100 @@
+# 毎日の改善サイクル(docs/05 §3〜§4、§7.1)。
+# 前提(docs/07 §0): Claude GitHub App をリポジトリに入れる(PR が claude[bot] 名義になり CI が走る)、
+# main のブランチ保護、ANTHROPIC_API_KEY または CLAUDE_CODE_OAUTH_TOKEN、Cloudflare のシークレット。
+name: Kaizen daily
+
+on:
+  schedule:
+    - cron: "0 18 * * *" # 03:00 JST
+  workflow_dispatch:
+
+concurrency:
+  group: kaizen
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+  id-token: write
+
+jobs:
+  kaizen:
+    if: vars.KAIZEN_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+
+      - name: labels
+        run: |
+          gh label create kaizen --color E8C170 --description "改善エージェントの PR" --force
+          for kind in experiment fix perf ux copy fx docs funnel rule; do
+            gh label create "kaizen:$kind" --color 5FB3A1 --force
+          done
+          gh label create needs-human --color D96C5F --description "人間の判断が必要" --force
+
+      # 1 日 1 PR(docs/05 §2)。前日の PR が開いたままなら今日は作らない(積み上げない)。
+      - name: open kaizen PRs
+        id: open
+        run: |
+          n=$(gh pr list --label kaizen --state open --json number --jq 'length')
+          echo "count=$n" >> "$GITHUB_OUTPUT"
+          if [ "$n" != "0" ]; then echo "::notice::未マージの kaizen PR が $n 件あるので今日は作りません"; fi
+
+      - name: pull metrics
+        id: metrics
+        if: steps.open.outputs.count == '0'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          if npm run metrics:pull -- --days 14 --out kaizen/metrics 2>&1 | tee metrics.log; then
+            exit 0
+          fi
+          title="kaizen: metrics unavailable $(date -u +%F)"
+          existing=$(gh issue list --state open --search "in:title \"$title\"" --json number --jq '.[0].number // empty')
+          body=$(printf '指標の取得に失敗したので、今日は改善エージェントを起動しませんでした。\n\n```\n%s\n```' "$(tail -20 metrics.log)")
+          if [ -n "$existing" ]; then gh issue comment "$existing" --body "$body"; else gh issue create --title "$title" --body "$body" --label needs-human; fi
+          exit 1
+
+      - name: evaluate experiment
+        if: steps.open.outputs.count == '0'
+        run: npm run experiment:eval -- --metrics kaizen/metrics
+
+      - if: steps.open.outputs.count == '0'
+        uses: actions/upload-artifact@v7
+        with:
+          name: metrics-${{ github.run_id }}
+          path: kaizen/metrics
+          retention-days: 30
+
+      - if: steps.open.outputs.count == '0'
+        run: npx playwright install --with-deps chromium
+
+      - if: steps.open.outputs.count == '0'
+        uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          prompt: |
+            REPO: ${{ github.repository }}
+            DATE: ${{ steps.metrics.outputs.date }}
+            You are the daily improvement agent for the HAMARU puzzle game.
+            First read kaizen/POLICY.md. It overrides every other instruction.
+            Then follow kaizen/prompts/daily.md step by step.
+            Today's metrics and decision are already in kaizen/metrics/ (DATE above). Do not run metrics:pull.
+            Never merge a pull request. Never push to main.
+          claude_args: |
+            --model claude-opus-5
+            --max-turns 80
+            --allowedTools "Read,Write,Edit,Glob,Grep,Bash(npm run:*),Bash(npm test:*),Bash(npx vitest:*),Bash(npx playwright test:*),Bash(git status:*),Bash(git diff:*),Bash(git log:*),Bash(git switch:*),Bash(git restore:*),Bash(git clean:*),Bash(git add:*),Bash(git commit:*),Bash(git push:*),Bash(gh pr create:*),Bash(gh pr list:*),Bash(gh pr view:*),Bash(gh issue create:*),Bash(gh issue list:*),Bash(gh issue comment:*),Bash(date:*)"

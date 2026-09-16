@@ -25,6 +25,7 @@ jobs:
     outputs:
       deployed: ${{ steps.secrets.outputs.ok }}
       url: ${{ steps.deploy.outputs.url }}
+      deployed_at: ${{ steps.deploy.outputs.deployed_at }}
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -64,6 +65,7 @@ jobs:
         run: |
           export GIT_SHA="${GIT_SHA:0:7}"
           npm run deploy | tee deploy.log
+          echo "deployed_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
           url="${{ vars.PUBLIC_URL }}"
           if [ -z "$url" ]; then
             url=$(grep -oE "https://hamaru\.[a-z0-9-]+\.workers\.dev" deploy.log | head -1 || true)
@@ -87,3 +89,64 @@ jobs:
           done
           echo "::error::ヘルスチェックに失敗しました: $URL/api/health → $body"
           exit 1
+
+  # デプロイ後 30 分のエラー率を判定し、急増していれば本番を直前の版に戻す(docs/05 §7.3)。
+  # 別ワークフロー(workflow_run)にせず後続ジョブにしたのは、GITHUB_TOKEN 起点の連鎖が起動しない場合があるため
+  # (docs/05 §13 N-7)。
+  canary:
+    needs: deploy
+    if: needs.deploy.outputs.deployed == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - name: wait 30 minutes
+        run: sleep 1800
+      - name: judge
+        id: canary
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: npm run canary -- --since "${{ needs.deploy.outputs.deployed_at }}" --window-minutes 30 --baseline-hours 24
+      - name: rollback production
+        if: steps.canary.outputs.decision == 'rollback'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          npx wrangler rollback --yes --message "canary rollback ${GITHUB_SHA:0:7}: エラー急増"
+      - name: revert PR and issue
+        if: steps.canary.outputs.decision == 'rollback'
+        env:
+          REASON: ${{ steps.canary.outputs.reason }}
+        run: |
+          short=${GITHUB_SHA:0:7}
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          branch="canary/revert-$short"
+          git switch -c "$branch"
+          if git revert --no-edit "$GITHUB_SHA"; then
+            git push -u origin "$branch"
+            gh label create revert --color D96C5F --force
+            gh label create needs-human --color D96C5F --force
+            pr=$(gh pr create --base main --head "$branch" --label revert --label needs-human \
+              --title "revert: $short(canary がエラー急増を検知)" \
+              --body "$(printf '本番は wrangler rollback で直前の版に戻しました。このコミットを main からも取り除きます。\n\n判定: %s\n\nGITHUB_TOKEN で作った PR なので CI が自動では走りません。確認して close → reopen するか、手元で push してください。' "$REASON")")
+          else
+            pr="(git revert が衝突したため PR は作れませんでした)"
+          fi
+          gh issue create --label needs-human --title "canary: auto-rollback $short" \
+            --body "$(printf 'デプロイ %s の 30 分後にエラーが急増したため、本番を直前の版に戻しました。\n\n- 判定: %s\n- revert PR: %s\n\n原因の PR には needs-human を付け、同じ変更の再挑戦は禁止です(docs/05 §11)。' "$short" "$REASON" "$pr")"

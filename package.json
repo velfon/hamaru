@@ -33,7 +33,10 @@
     "test:e2e": "playwright test",
     "budget": "tsx scripts/size-budget.ts",
     "cf:types": "wrangler types --strict-vars=false",
-    "cf:dev": "vite build && wrangler dev --port 8787"
+    "cf:dev": "vite build && wrangler dev --port 8787",
+    "kaizen:digest": "tsx scripts/kaizen-digest.ts",
+    "canary": "tsx scripts/canary.ts",
+    "change-class": "tsx scripts/change-class.ts"
   },
   "dependencies": {
     "web-vitals": "6.2.2",
