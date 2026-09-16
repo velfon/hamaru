@@ -23,7 +23,7 @@
     "format:check": "prettier --check .",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
-    "sim": "echo TODO && exit 1",
+    "sim": "tsx sim/run.ts",
     "validate:config": "tsx scripts/validate-config.ts",
     "i18n:check": "echo TODO && exit 1",
     "golden:update": "tsx scripts/golden-update.ts",

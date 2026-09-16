@@ -1,0 +1,128 @@
+{
+  "generatedFrom": {
+    "config": "src/config/game-config.json",
+    "variant": null,
+    "seed": 1,
+    "games": 2000
+  },
+  "bots": {
+    "random": {
+      "bot": "random",
+      "games": 2000,
+      "moves": {
+        "mean": 20.913,
+        "median": 20,
+        "p10": 14,
+        "p90": 29,
+        "min": 10,
+        "max": 56
+      },
+      "score": {
+        "mean": 84.984,
+        "median": 74,
+        "p10": 55,
+        "p90": 129,
+        "min": 30,
+        "max": 406
+      },
+      "lines": {
+        "mean": 1.037,
+        "median": 0,
+        "p10": 0,
+        "p90": 3,
+        "min": 0,
+        "max": 13
+      },
+      "round": {
+        "mean": 7.364,
+        "median": 7,
+        "p10": 5,
+        "p90": 10,
+        "min": 4,
+        "max": 19
+      },
+      "gameOverAtRound1": 0,
+      "boardClear": 0,
+      "elapsedMs": 204
+    },
+    "greedy": {
+      "bot": "greedy",
+      "games": 2000,
+      "moves": {
+        "mean": 83.299,
+        "median": 77,
+        "p10": 47,
+        "p90": 128,
+        "min": 17,
+        "max": 299
+      },
+      "score": {
+        "mean": 562.205,
+        "median": 511.5,
+        "p10": 297,
+        "p90": 897,
+        "min": 112,
+        "max": 2152
+      },
+      "lines": {
+        "mean": 23.91,
+        "median": 22,
+        "p10": 11,
+        "p90": 40,
+        "min": 3,
+        "max": 99
+      },
+      "round": {
+        "mean": 28.148,
+        "median": 26,
+        "p10": 16,
+        "p90": 43,
+        "min": 6,
+        "max": 100
+      },
+      "gameOverAtRound1": 0,
+      "boardClear": 0.008,
+      "elapsedMs": 1189
+    },
+    "lookahead": {
+      "bot": "lookahead",
+      "games": 2000,
+      "moves": {
+        "mean": 94.222,
+        "median": 86,
+        "p10": 50,
+        "p90": 149,
+        "min": 20,
+        "max": 383
+      },
+      "score": {
+        "mean": 656.743,
+        "median": 590,
+        "p10": 328,
+        "p90": 1071,
+        "min": 118,
+        "max": 2853
+      },
+      "lines": {
+        "mean": 28.127,
+        "median": 25,
+        "p10": 13,
+        "p90": 47,
+        "min": 3,
+        "max": 129
+      },
+      "round": {
+        "mean": 31.78,
+        "median": 29,
+        "p10": 17,
+        "p90": 50,
+        "min": 7,
+        "max": 128
+      },
+      "gameOverAtRound1": 0,
+      "boardClear": 0.008,
+      "elapsedMs": 3939
+    }
+  },
+  "totalElapsedMs": 5336
+}

@@ -12,7 +12,7 @@
 | フェーズ | 状態 |
 |---|---|
 | 1. 設計 | 完了(2026-09-17) |
-| 2. 実装 v1.0(Opus 5) | 未着手 — [docs/07-implementation-plan.md](docs/07-implementation-plan.md) |
+| 2. 実装 v1.0(Opus 5) | 進行中 — M0 骨組み / M1 コア / M2 シミュレーション 完了、M3 UI 以降が未着手([docs/07-implementation-plan.md](docs/07-implementation-plan.md)) |
 | 3. 自律改善ループ稼働 | 未着手 |
 
 ## 開発(実装後)

@@ -104,3 +104,34 @@ npm run sim -- --games 2000 --bots random,greedy,lookahead --seed 1 [--config pa
 | エラー経路 | 壊れた保存データ / config の deep-merge で不正値 / `/api/events` が 500 を返す / `navigator.share` が reject / `vibrate` 未定義 |
 | 時間 | UTC 日付境界でのデイリー / 途中で日付が変わる / 端末時計が過去 |
 | 入力 | ドラッグ中の `pointercancel` / 二本目の指 / 盤外ドロップ / 画面回転 |
+
+## 9. 実装ノート(実装フェーズで解消した曖昧さ)
+
+### N-1. `sim/out/<name>.json` の `<name>` はボット名(§4)
+1 回の実行で走らせたボットごとに `sim/out/random.json` / `greedy.json` / `lookahead.json` を書く。
+各ファイルには実行条件(config パス・variant・seed・games)と、そのボットの
+`moves` / `score` / `lines` / `round` の mean・median・p10・p90・min・max、
+`gameOverAtRound1` 率、`boardClear` 率、実行時間 (ms) が入る。
+`sim/out/` は `.gitignore` 済み(生成物)。`sim/baseline.json` だけがコミット対象。
+
+### N-2. baseline の生成は `--write-baseline`(§4)
+§4 は「`sim/baseline.json`(制御群の既定 config で生成)」とだけ書いているので、
+生成手段として `--write-baseline` フラグを足した。現在の baseline は
+`npm run sim -- --games 2000 --bots random,greedy,lookahead --seed 1 --write-baseline` で生成している。
+`sim-baseline: update` ラベルの付いた PR だけがこのファイルを更新してよい。
+
+### N-3. `gameOverAtRound1` の定義(§4)
+「ゲームが `round === 1` のまま終了した割合」とした。
+= 最初のトレイ 3 つを置き切れずに詰んだ割合。`fitGuarantee: "oneOfThree"` なら 0 になる。
+
+### N-4. ボットの評価関数は core の `place` を使わない(§4)
+候補手は 1 ゲームあたり数万回評価するため、`sim/evaluate.ts` に
+**盤を書き換えて元に戻す**非確保の評価関数を置いた。得点計算そのものは
+`src/core/scoring.ts` の `scorePlacement` を呼ぶので core と必ず一致し、
+その一致は `tests/unit/sim.test.ts` の「core の place と同じ得点・消去数になる」で担保している。
+実際に打つ手は core の `place` を通す。
+
+### N-5. ボットの乱数はゲームの乱数と分離する(§4)
+`random` ボットの選択に `GameState.rng` を使うと出題列が乱れるため、
+ゲームごとに `bot:<gameSeed>` で初期化した別の乱数器を使う。
+同じ `--seed` なら全ボットが同じ出題列に直面し、結果は完全に再現する。
