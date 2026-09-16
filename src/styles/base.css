@@ -1,0 +1,517 @@
+/*
+ * 土台(リセット・レイアウト・共通コンポーネント)。docs/03 §4 §6 §9
+ */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--kiln);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: var(--fs-body);
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  overscroll-behavior: none;
+}
+
+h1,
+h2,
+h3 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-weight: 700;
+  line-height: 1.1;
+  letter-spacing: 0.02em;
+}
+
+p {
+  margin: 0 0 12px;
+}
+
+:focus-visible {
+  outline: 3px solid var(--kintsugi);
+  outline-offset: 2px;
+}
+
+/* ------------------------------------------------------------------ */
+/* ページ骨格                                                           */
+/* ------------------------------------------------------------------ */
+
+#app {
+  min-height: 100dvh;
+}
+
+.screen {
+  width: min(100vw, var(--page-width));
+  margin: 0 auto;
+  padding: 0 var(--gutter) calc(16px + env(safe-area-inset-bottom));
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+}
+
+.topbar {
+  height: var(--header-h);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex: none;
+}
+
+.topbar__title {
+  font-size: var(--fs-title);
+  font-weight: 900;
+  letter-spacing: 0.06em;
+}
+
+.topbar__spacer {
+  flex: 1;
+}
+
+/* ------------------------------------------------------------------ */
+/* ボタン(docs/03 §6)                                                  */
+/* ------------------------------------------------------------------ */
+
+.btn {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 52px;
+  padding: 0 20px;
+  border-radius: var(--radius-button);
+  border: 0;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 14px;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  text-decoration: none;
+  transition: transform var(--t-snap) var(--ease-out);
+}
+
+.btn:active {
+  transform: translateY(1px);
+}
+
+.btn--primary {
+  background: var(--ink);
+  color: var(--kiln);
+}
+
+.btn--secondary {
+  background: transparent;
+  color: var(--ink);
+  border: 1px solid var(--ink-muted);
+}
+
+.btn--ghost {
+  background: transparent;
+  color: var(--ink-muted);
+  min-height: 44px;
+  padding: 0 12px;
+  font-family: var(--font-body);
+  font-weight: 500;
+  letter-spacing: 0;
+}
+
+.btn--block {
+  width: 100%;
+}
+
+.iconbtn {
+  appearance: none;
+  background: transparent;
+  border: 0;
+  color: var(--ink-muted);
+  width: 44px;
+  height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+  cursor: pointer;
+}
+
+.iconbtn:hover {
+  color: var(--ink);
+}
+
+.iconbtn svg {
+  width: 22px;
+  height: 22px;
+  display: block;
+}
+
+/* ------------------------------------------------------------------ */
+/* ホーム                                                               */
+/* ------------------------------------------------------------------ */
+
+.home__hero {
+  padding: 8px 0 20px;
+}
+
+.home__wordmark {
+  font-family: var(--font-display);
+  font-weight: 900;
+  font-size: clamp(38px, 13vw, 64px);
+  letter-spacing: 0.08em;
+  line-height: 1;
+  margin: 0;
+}
+
+.home__tagline {
+  color: var(--ink-muted);
+  font-size: var(--fs-small);
+  margin: 10px 0 0;
+}
+
+/* 釉薬 6 色の見本帯。ゲームの色語彙をホームで先に見せる */
+.glazebar {
+  display: flex;
+  gap: 4px;
+  margin-top: 14px;
+}
+
+.glazebar span {
+  height: 6px;
+  flex: 1;
+  border-radius: 2px;
+  background: var(--g);
+}
+
+.card {
+  background: var(--tray);
+  border-radius: 18px;
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.card__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.card__title {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 17px;
+  letter-spacing: 0.02em;
+}
+
+.card__date {
+  font-family: var(--font-mono);
+  font-size: var(--fs-small);
+  color: var(--ink-muted);
+}
+
+.card__meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: var(--fs-small);
+  color: var(--ink-muted);
+}
+
+.card__state {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--fs-small);
+  color: var(--ink-muted);
+}
+
+.card__state::before {
+  content: "";
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--ink-muted);
+}
+
+.card__state--done::before {
+  background: var(--kintsugi);
+}
+
+.card__state--playing::before {
+  background: var(--glaze-2);
+}
+
+.streak {
+  color: var(--kintsugi);
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: var(--fs-small);
+  letter-spacing: 0.02em;
+}
+
+.home__actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 22px;
+}
+
+.home__stats {
+  margin-top: auto;
+  padding-top: 24px;
+  display: flex;
+  gap: 18px;
+  flex-wrap: wrap;
+  color: var(--ink-muted);
+  font-size: var(--fs-small);
+}
+
+.home__stats b {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+}
+
+/* ------------------------------------------------------------------ */
+/* 設定 / About                                                         */
+/* ------------------------------------------------------------------ */
+
+.rows {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-bottom: 24px;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 56px;
+  padding: 8px 14px;
+  background: var(--tray);
+}
+
+.rows .row:first-child {
+  border-radius: 14px 14px 0 0;
+}
+
+.rows .row:last-child {
+  border-radius: 0 0 14px 14px;
+}
+
+.row--link {
+  color: var(--ink);
+  text-decoration: none;
+}
+
+.row--link svg {
+  width: 18px;
+  height: 18px;
+  color: var(--ink-muted);
+}
+
+.row__label {
+  font-size: var(--fs-body);
+}
+
+.row__hint {
+  display: block;
+  font-size: var(--fs-small);
+  color: var(--ink-muted);
+}
+
+.row select {
+  appearance: none;
+  background: var(--kiln);
+  color: var(--ink);
+  border: 1px solid var(--ink-muted);
+  border-radius: 10px;
+  padding: 8px 32px 8px 12px;
+  font-family: var(--font-body);
+  font-size: var(--fs-small);
+  cursor: pointer;
+  background-image:
+    linear-gradient(45deg, transparent 50%, currentcolor 50%),
+    linear-gradient(135deg, currentcolor 50%, transparent 50%);
+  background-position:
+    calc(100% - 16px) calc(50% + 1px),
+    calc(100% - 11px) calc(50% + 1px);
+  background-size:
+    5px 5px,
+    5px 5px;
+  background-repeat: no-repeat;
+}
+
+/* トグル */
+.switch {
+  position: relative;
+  width: 52px;
+  height: 30px;
+  flex: none;
+}
+
+.switch input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  margin: 0;
+  width: 100%;
+  height: 100%;
+  cursor: pointer;
+}
+
+.switch__track {
+  position: absolute;
+  inset: 0;
+  border-radius: 999px;
+  background: var(--cell-empty);
+  border: 1px solid var(--cell-edge);
+  transition: background var(--t-lift) var(--ease-out);
+  pointer-events: none;
+}
+
+.switch__track::after {
+  content: "";
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--ink-muted);
+  transition:
+    transform var(--t-lift) var(--ease-out),
+    background var(--t-lift) var(--ease-out);
+}
+
+.switch input:checked + .switch__track {
+  background: color-mix(in oklab, var(--kintsugi), transparent 70%);
+}
+
+.switch input:checked + .switch__track::after {
+  transform: translateX(22px);
+  background: var(--kintsugi);
+}
+
+.switch input:focus-visible + .switch__track {
+  outline: 3px solid var(--kintsugi);
+  outline-offset: 2px;
+}
+
+.prose {
+  color: var(--ink);
+  font-size: var(--fs-body);
+  max-width: 46ch;
+}
+
+.prose ul {
+  padding-left: 1.1em;
+  margin: 0 0 20px;
+}
+
+.prose li {
+  margin-bottom: 10px;
+}
+
+.prose .muted {
+  color: var(--ink-muted);
+  font-size: var(--fs-small);
+}
+
+.link {
+  color: var(--ink);
+  text-decoration-color: var(--kintsugi);
+  text-underline-offset: 3px;
+}
+
+/* ------------------------------------------------------------------ */
+/* トースト・ダイアログ(docs/03 §6)                                     */
+/* ------------------------------------------------------------------ */
+
+.toasts {
+  position: fixed;
+  left: 50%;
+  bottom: calc(24px + env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  z-index: 40;
+  pointer-events: none;
+}
+
+.toast {
+  background: var(--ink);
+  color: var(--kiln);
+  border-radius: 999px;
+  padding: 10px 18px;
+  font-size: var(--fs-small);
+  box-shadow: 0 6px 20px rgb(0 0 0 / 25%);
+  animation: toast-in 160ms var(--ease-out);
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+
+dialog.dialog {
+  border: 0;
+  border-radius: 18px;
+  padding: 22px;
+  width: min(92vw, 380px);
+  background: var(--tray);
+  color: var(--ink);
+}
+
+dialog.dialog::backdrop {
+  background: rgb(0 0 0 / 55%);
+}
+
+.dialog__title {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 18px;
+  margin-bottom: 10px;
+}
+
+.dialog__body {
+  color: var(--ink-muted);
+  font-size: var(--fs-small);
+  margin-bottom: 20px;
+}
+
+.dialog__actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}

@@ -1,0 +1,102 @@
+/*
+ * デザイントークン(docs/03 §2 カラー / §3 タイポ)。
+ * 値は設計書の表そのまま。ここ以外で色を直書きしない。
+ */
+
+/* Unbounded: 数字と基本ラテンのみのサブセット(可変ウェイト 700–900)。docs/03 §3 */
+@font-face {
+  font-family: "Unbounded";
+  font-style: normal;
+  font-weight: 700 900;
+  font-display: swap;
+  src: url("/fonts/unbounded-var.woff2") format("woff2");
+}
+
+:root {
+  /* ダーク(既定。窯の中) */
+  --kiln: #17262a;
+  --tray: #1f3136;
+  --cell-empty: #26393f;
+  --cell-edge: #0f1a1d;
+  --ink: #f1ede4;
+  --ink-muted: #9db0b0;
+  --kintsugi: #e8c170;
+  --danger: #d96c5f;
+
+  /* 釉薬(ライト / ダーク共通) */
+  --glaze-1: #e0855a; /* 柿 — 線・dot */
+  --glaze-2: #5fb3a1; /* 青磁 — 正方形 */
+  --glaze-3: #e4c25a; /* 黄瀬戸 — 小 L */
+  --glaze-4: #9a86c9; /* 藤 — 大 L */
+  --glaze-5: #d97a94; /* 紅 — T */
+  --glaze-6: #6b9fd6; /* 瑠璃 — 長方形 */
+
+  /* タイポ(docs/03 §3) */
+  --font-display: "Unbounded", system-ui, sans-serif;
+  --font-body: system-ui, -apple-system, "Hiragino Sans", "Noto Sans JP", sans-serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, monospace;
+  --fs-score: clamp(28px, 8vw, 44px);
+  --fs-title: clamp(24px, 6vw, 36px);
+  --fs-body: 16px;
+  --fs-small: 13px;
+
+  /* レイアウト(docs/03 §4) */
+  --page-width: 560px;
+  --gutter: 16px;
+  --header-h: 56px;
+  --tray-h: 132px;
+  --radius-button: 14px;
+
+  /* モーション(docs/03 §5)。軽減時は JS / CSS の両方でここを 0 にする */
+  --t-lift: 120ms;
+  --t-snap: 90ms;
+  --t-return: 180ms;
+  --ease-out: cubic-bezier(0.22, 0.61, 0.36, 1);
+  --ease-in-out: cubic-bezier(0.45, 0.05, 0.55, 0.95);
+}
+
+/* ライト(釉薬見本帳) */
+:root[data-theme="light"] {
+  --kiln: #eee9df;
+  --tray: #dcd5c7;
+  --cell-empty: #e6e0d3;
+  --cell-edge: #c9c0af;
+  --ink: #1e2a2c;
+  --ink-muted: #5d6e6e;
+  --kintsugi: #b8892e;
+  --danger: #b94e42;
+}
+
+@media (prefers-color-scheme: light) {
+  :root[data-theme="auto"] {
+    --kiln: #eee9df;
+    --tray: #dcd5c7;
+    --cell-empty: #e6e0d3;
+    --cell-edge: #c9c0af;
+    --ink: #1e2a2c;
+    --ink-muted: #5d6e6e;
+    --kintsugi: #b8892e;
+    --danger: #b94e42;
+  }
+}
+
+/* 「常に軽減」設定。OS 設定は @media で拾う(docs/03 §5) */
+:root[data-motion="reduced"],
+:root[data-motion="reduced"] * {
+  --t-lift: 0ms;
+  --t-snap: 0ms;
+  --t-return: 0ms;
+  animation-duration: 0.001ms !important;
+  transition-duration: 0.001ms !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root[data-motion="system"],
+  :root[data-motion="system"] * {
+    --t-lift: 0ms;
+    --t-snap: 0ms;
+    --t-return: 0ms;
+    animation-duration: 0.001ms !important;
+    transition-duration: 0.001ms !important;
+  }
+}

@@ -32,7 +32,10 @@ export default tseslint.config(
   {
     ignores: [
       "dist/**",
+      "dev-dist/**",
       "coverage/**",
+      "test-results/**",
+      "playwright-report/**",
       "node_modules/**",
       "sim/out/**",
       "tests/unit/golden/*.json",

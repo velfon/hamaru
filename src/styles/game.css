@@ -1,0 +1,519 @@
+/*
+ * 盤・トレイ・演出(docs/03 §2 タイル / §4 レイアウト / §5 モーション)。
+ *
+ * 幾何: 盤の一辺 = min(100vw − 32px, 100dvh − ヘッダ − トレイ − 余白, 520px)。
+ * 目地 = セルの 8 %、角丸 = セルの 14 %。盤の外周にも目地 1 つ分の縁を取るので
+ *   board = n·unit + (n+1)·0.08·unit  →  unit = board / (1.08n + 0.08)
+ */
+
+.game {
+  --n: 10;
+  --board: min(100vw - 2 * var(--gutter), 100dvh - var(--header-h) - var(--tray-h) - 24px, 520px);
+  --unit: calc(var(--board) / (var(--n) * 1.08 + 0.08));
+  --grout: calc(var(--unit) * 0.08);
+  --tile-radius: calc(var(--unit) * 0.14);
+  touch-action: manipulation;
+}
+
+/* ------------------------------------------------------------------ */
+/* ヘッダ(スコア)                                                      */
+/* ------------------------------------------------------------------ */
+
+.hud {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  flex: none;
+  padding-bottom: 8px;
+}
+
+.hud__scores {
+  display: flex;
+  align-items: baseline;
+  gap: 16px;
+}
+
+.stat__label {
+  display: block;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-muted);
+}
+
+.stat__value {
+  font-family: var(--font-display);
+  font-weight: 900;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  display: flex;
+  overflow: hidden;
+}
+
+.stat--score .stat__value {
+  font-size: var(--fs-score);
+}
+
+.stat--best .stat__value {
+  font-size: 18px;
+  color: var(--ink-muted);
+  font-weight: 700;
+}
+
+.digit {
+  display: inline-block;
+}
+
+.streakbadge {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: var(--fs-small);
+  color: var(--kintsugi);
+  border: 1px solid color-mix(in oklab, var(--kintsugi), transparent 60%);
+  border-radius: 999px;
+  padding: 3px 10px;
+  align-self: center;
+}
+
+.modetag {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--ink-muted);
+  letter-spacing: 0.04em;
+}
+
+/* ------------------------------------------------------------------ */
+/* 盤                                                                   */
+/* ------------------------------------------------------------------ */
+
+.game__play {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-height: 0;
+}
+
+.boardwrap {
+  position: relative;
+  width: var(--board);
+  height: var(--board);
+  margin: 0 auto;
+  flex: none;
+}
+
+.board {
+  width: 100%;
+  height: 100%;
+  display: grid;
+  grid-template-columns: repeat(var(--n), var(--unit));
+  grid-template-rows: repeat(var(--n), var(--unit));
+  gap: var(--grout);
+  padding: var(--grout);
+  background: var(--tray);
+  border-radius: calc(var(--tile-radius) * 1.6);
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+
+.board__row {
+  display: contents;
+}
+
+.cell {
+  position: relative;
+  border-radius: var(--tile-radius);
+  background: var(--cell-empty);
+  box-shadow: inset 0 2px 3px color-mix(in oklab, var(--cell-edge), transparent 35%);
+}
+
+.cell[data-c="1"] {
+  --glaze: var(--glaze-1);
+}
+.cell[data-c="2"] {
+  --glaze: var(--glaze-2);
+}
+.cell[data-c="3"] {
+  --glaze: var(--glaze-3);
+}
+.cell[data-c="4"] {
+  --glaze: var(--glaze-4);
+}
+.cell[data-c="5"] {
+  --glaze: var(--glaze-5);
+}
+.cell[data-c="6"] {
+  --glaze: var(--glaze-6);
+}
+
+/* 釉薬タイル(docs/03 §2) */
+.cell:not([data-c="0"]) {
+  background: linear-gradient(
+    160deg,
+    color-mix(in oklab, var(--glaze), white 18%),
+    var(--glaze) 55%,
+    color-mix(in oklab, var(--glaze), black 12%)
+  );
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 35%),
+    0 2px 0 var(--cell-edge);
+}
+
+/* 消去プレビュー: 対象行列を金 20 % で下塗り(点滅しない) */
+.cell[data-preview="1"]::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: color-mix(in oklab, var(--kintsugi), transparent 80%);
+}
+
+/* ゴースト(置ける位置の半透明プレビュー) */
+.cell[data-ghost]::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: var(--ghost-color);
+  opacity: 0.5;
+  box-shadow: inset 0 0 0 2px color-mix(in oklab, var(--ghost-color), white 30%);
+}
+
+.cell[data-ghost="1"] {
+  --ghost-color: var(--glaze-1);
+}
+.cell[data-ghost="2"] {
+  --ghost-color: var(--glaze-2);
+}
+.cell[data-ghost="3"] {
+  --ghost-color: var(--glaze-3);
+}
+.cell[data-ghost="4"] {
+  --ghost-color: var(--glaze-4);
+}
+.cell[data-ghost="5"] {
+  --ghost-color: var(--glaze-5);
+}
+.cell[data-ghost="6"] {
+  --ghost-color: var(--glaze-6);
+}
+
+/* キーボードのカーソル位置 */
+.cell[data-cursor="1"] {
+  outline: 2px solid var(--kintsugi);
+  outline-offset: 1px;
+}
+
+/* ------------------------------------------------------------------ */
+/* トレイ                                                               */
+/* ------------------------------------------------------------------ */
+
+.tray {
+  height: var(--tray-h);
+  flex: none;
+  margin-top: 16px;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  touch-action: none;
+}
+
+.slot {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  border-radius: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+
+.slot:disabled {
+  cursor: default;
+}
+
+.slot__grid {
+  display: grid;
+  gap: calc(var(--grout) * 0.6);
+  transition: opacity var(--t-lift) var(--ease-out);
+}
+
+.slot .cell {
+  width: calc(var(--unit) * 0.6);
+  height: calc(var(--unit) * 0.6);
+  border-radius: calc(var(--tile-radius) * 0.6);
+}
+
+.slot .cell[data-c="0"] {
+  background: transparent;
+  box-shadow: none;
+}
+
+.slot[data-dragging="1"] .slot__grid {
+  opacity: 0;
+}
+
+.slot[data-selected="1"] {
+  background: color-mix(in oklab, var(--kintsugi), transparent 86%);
+}
+
+/* ゲームオーバー確定時、置けないピースを暗転(docs/03 §5) */
+.slot[data-dead="1"] .slot__grid {
+  animation: piece-dim 600ms var(--ease-in-out) forwards;
+}
+
+@keyframes piece-dim {
+  to {
+    opacity: 0.25;
+    filter: grayscale(0.85);
+  }
+}
+
+.slot[data-dead="1"] .cell:not([data-c="0"]) {
+  box-shadow:
+    inset 0 0 0 1px var(--danger),
+    0 2px 0 var(--cell-edge);
+}
+
+/* ------------------------------------------------------------------ */
+/* ドラッグ中のピース                                                    */
+/* ------------------------------------------------------------------ */
+
+.draglayer {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 30;
+}
+
+.dragpiece {
+  position: absolute;
+  top: 0;
+  left: 0;
+  will-change: transform;
+  filter: drop-shadow(0 10px 14px rgb(0 0 0 / 35%));
+}
+
+.dragpiece__grid {
+  display: grid;
+  gap: var(--grout);
+}
+
+.dragpiece .cell {
+  width: var(--unit);
+  height: var(--unit);
+}
+
+.dragpiece .cell[data-c="0"] {
+  background: transparent;
+  box-shadow: none;
+}
+
+/* ------------------------------------------------------------------ */
+/* 演出(金継ぎ・全消し)                                                 */
+/* ------------------------------------------------------------------ */
+
+.fxlayer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+  border-radius: calc(var(--tile-radius) * 1.6);
+}
+
+.fxtile {
+  position: absolute;
+  z-index: 1;
+  border-radius: var(--tile-radius);
+  background: linear-gradient(
+    160deg,
+    color-mix(in oklab, var(--glaze), white 18%),
+    var(--glaze) 55%,
+    color-mix(in oklab, var(--glaze), black 12%)
+  );
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 35%);
+}
+
+.fxtile[data-c="1"] {
+  --glaze: var(--glaze-1);
+}
+.fxtile[data-c="2"] {
+  --glaze: var(--glaze-2);
+}
+.fxtile[data-c="3"] {
+  --glaze: var(--glaze-3);
+}
+.fxtile[data-c="4"] {
+  --glaze: var(--glaze-4);
+}
+.fxtile[data-c="5"] {
+  --glaze: var(--glaze-5);
+}
+.fxtile[data-c="6"] {
+  --glaze: var(--glaze-6);
+}
+
+/* 金継ぎ線: 割れ目に金が走る。タイルの上を走るので前面に置く */
+.kintsugi {
+  position: absolute;
+  z-index: 2;
+  background: linear-gradient(
+    90deg,
+    color-mix(in oklab, var(--kintsugi), transparent 40%),
+    var(--kintsugi) 45%,
+    color-mix(in oklab, var(--kintsugi), white 25%)
+  );
+  box-shadow: 0 0 10px color-mix(in oklab, var(--kintsugi), transparent 30%);
+  border-radius: 2px;
+}
+
+.kintsugi--v {
+  background: linear-gradient(
+    180deg,
+    color-mix(in oklab, var(--kintsugi), transparent 40%),
+    var(--kintsugi) 45%,
+    color-mix(in oklab, var(--kintsugi), white 25%)
+  );
+}
+
+.boardflash {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  box-shadow:
+    inset 0 0 0 3px var(--kintsugi),
+    0 0 40px color-mix(in oklab, var(--kintsugi), transparent 40%);
+}
+
+.fxlabel {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  font-family: var(--font-display);
+  font-weight: 900;
+  font-size: clamp(20px, 6vw, 30px);
+  color: var(--kintsugi);
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+
+/* ------------------------------------------------------------------ */
+/* ゲームオーバー(docs/03 §6 Overlay)                                   */
+/* ------------------------------------------------------------------ */
+
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  background: color-mix(in oklab, var(--kiln), transparent 15%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--gutter);
+  animation: fade-in 200ms var(--ease-out);
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+.overlay__panel {
+  width: min(100%, 400px);
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.overlay__title {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 18px;
+  color: var(--ink-muted);
+  letter-spacing: 0.04em;
+}
+
+.overlay__score {
+  font-family: var(--font-display);
+  font-weight: 900;
+  font-size: clamp(48px, 16vw, 76px);
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.overlay__newbest {
+  display: inline-block;
+  align-self: flex-start;
+  font-family: var(--font-display);
+  font-weight: 900;
+  font-size: var(--fs-small);
+  letter-spacing: 0.08em;
+  color: var(--kintsugi);
+  border-bottom: 2px solid var(--kintsugi);
+  padding-bottom: 2px;
+}
+
+.overlay__grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  padding: 16px 0;
+  border-top: 1px solid color-mix(in oklab, var(--ink-muted), transparent 65%);
+  border-bottom: 1px solid color-mix(in oklab, var(--ink-muted), transparent 65%);
+}
+
+.overlay__grid div {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.overlay__grid b {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 20px;
+  font-variant-numeric: tabular-nums;
+}
+
+.overlay__actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* ------------------------------------------------------------------ */
+/* 横長(高さ < 500px): 盤を左、トレイを右(docs/03 §4)                   */
+/* ------------------------------------------------------------------ */
+
+@media (max-height: 500px) and (orientation: landscape) {
+  .game {
+    --board: min(100dvh - var(--header-h) - 16px, 60vw, 520px);
+    width: min(100vw, 900px);
+  }
+
+  .game__play {
+    display: flex;
+    align-items: center;
+    gap: 24px;
+  }
+
+  .tray {
+    height: auto;
+    margin-top: 0;
+    flex: 1;
+    grid-template-columns: 1fr;
+    grid-template-rows: repeat(3, 1fr);
+    max-height: var(--board);
+  }
+}

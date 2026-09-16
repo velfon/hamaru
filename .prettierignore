@@ -6,3 +6,5 @@ package-lock.json
 *.md
 tests/unit/golden/*.json
 sim/baseline.json
+dev-dist
+
