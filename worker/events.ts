@@ -19,6 +19,11 @@ export interface DataPoint {
 
 export interface EventsEnv {
   EVENTS: { writeDataPoint(point: DataPoint): void };
+  /**
+   * "off" なら検証だけして書き込まない(PR プレビュー用。本番の指標に混ぜない)。
+   * 未設定は "on" 扱い。
+   */
+  TELEMETRY?: string;
 }
 
 /** イベント固有の文字列 1(docs/04 §4 の blob10)。 */
@@ -146,8 +151,10 @@ export async function handleEvents(
   const parsed = parseBatch(json);
   if (!parsed.ok) return problem(400, `invalid batch (max ${MAX_EVENTS} events): ${parsed.error}`);
 
-  for (const event of parsed.batch.events) {
-    env.EVENTS.writeDataPoint(toDataPoint(event, country));
+  if (env.TELEMETRY !== "off") {
+    for (const event of parsed.batch.events) {
+      env.EVENTS.writeDataPoint(toDataPoint(event, country));
+    }
   }
 
   return new Response(null, {

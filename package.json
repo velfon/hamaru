@@ -32,7 +32,7 @@
     "deploy": "vite build && wrangler deploy --var APP_VERSION:${GIT_SHA:-dev}",
     "test:e2e": "playwright test",
     "budget": "tsx scripts/size-budget.ts",
-    "cf:types": "wrangler types",
+    "cf:types": "wrangler types --strict-vars=false",
     "cf:dev": "vite build && wrangler dev --port 8787"
   },
   "dependencies": {

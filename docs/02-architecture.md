@@ -402,3 +402,9 @@ LCP 要素は JS が描く文字で、内訳の 73 % が描画待ち(JS のダ�
 
 結果: 初回 JS **47.35 → 22.04 KB gzip**、LCP **1.70 → 1.39 秒**(ローカルの lhci、3 回の中央値)。
 §4.4 手順 4 の「失敗なら base にフォールバック」は、実行時ではなくビルド時に失敗させる形になった。
+
+### N-11. PR プレビューは本番の指標に書き込まない(§8)
+`wrangler.jsonc` で `preview_urls: true` にし、PR ごとに `wrangler versions upload --preview-alias pr-<n> --var TELEMETRY:off`
+で上げる(URL は `pr-<n>-hamaru.<subdomain>.workers.dev`)。プレビューは本番と同じ Analytics Engine データセットに
+バインドされるため、Worker は `TELEMETRY=off` のとき**検証だけして書き込まない**。`/api/health` は `telemetry` の真偽も返す。
+`wrangler types` はリテラル型を生成するので `npm run cf:types` は `--strict-vars=false` を付ける。

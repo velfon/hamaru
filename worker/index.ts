@@ -28,7 +28,7 @@ export default {
 
     if (url.pathname === "/api/health") {
       return Response.json(
-        { ok: true, version: env.APP_VERSION },
+        { ok: true, version: env.APP_VERSION, telemetry: env.TELEMETRY !== "off" },
         { headers: { "x-content-type-options": "nosniff", "cache-control": "no-store" } },
       );
     }

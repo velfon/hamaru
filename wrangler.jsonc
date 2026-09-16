@@ -3,6 +3,9 @@
   "name": "hamaru",
   "main": "worker/index.ts",
   "compatibility_date": "2026-09-01",
+  // PR ごとのプレビュー(`wrangler versions upload --preview-alias pr-<n>`)を有効にする。
+  // プレビューは `--var TELEMETRY:off` で上げ、本番の指標に混ぜない(docs/02 §11 N-11)。
+  "preview_urls": true,
   "assets": {
     "directory": "./dist",
     "binding": "ASSETS",
@@ -10,6 +13,6 @@
     "run_worker_first": ["/api/*"],
   },
   "analytics_engine_datasets": [{ "binding": "EVENTS", "dataset": "hamaru_events" }],
-  "vars": { "APP_VERSION": "dev" },
+  "vars": { "APP_VERSION": "dev", "TELEMETRY": "on" },
   "observability": { "enabled": true },
 }

@@ -97,6 +97,15 @@ describe("handleEvents", () => {
     expect(points[1]?.blobs[5]).toBe("JP");
   });
 
+  it("TELEMETRY=off(PR プレビュー)なら検証はするが書き込まない", async () => {
+    const { env, points } = fakeEnv();
+    const off = { ...env, TELEMETRY: "off" };
+    expect((await handleEvents(post(batch), off, "JP")).status).toBe(204);
+    expect(points).toHaveLength(0);
+    const bad = JSON.stringify({ events: [{ ...SAMPLE_EVENTS.share, method: "fax" }] });
+    expect((await handleEvents(post(bad), off, "JP")).status).toBe(400);
+  });
+
   it("Origin が別ホストなら 403、無ければ 403", async () => {
     const { env, points } = fakeEnv();
     expect(
