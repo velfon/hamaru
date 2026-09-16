@@ -88,11 +88,22 @@ interface StartInfo {
   date: string;
 }
 
-/** 開発ビルドのみ: `?state=` で状態を差し込む(docs/06 §5)。 */
+/**
+ * 開発ビルドのみ: `?state=` で状態を差し込む(docs/06 §5)。
+ * **1 回だけ**効くように、読んだらすぐ URL から消す(以降は通常どおり保存状態で動く)。
+ */
 function seededState(): GameState | null {
   if (!import.meta.env.DEV) return null;
-  const raw = new URLSearchParams(location.search).get("state");
+  const params = new URLSearchParams(location.search);
+  const raw = params.get("state");
   if (raw === null) return null;
+  params.delete("state");
+  const search = params.toString();
+  history.replaceState(
+    null,
+    "",
+    `${location.pathname}${search === "" ? "" : `?${search}`}${location.hash}`,
+  );
   return deserialize(raw);
 }
 

@@ -25,7 +25,8 @@ export interface ShareInput {
 
 function gauge(score: number, max: number): string {
   const ratio = max > 0 ? Math.min(score / max, 1) : 0;
-  const filled = Math.round(ratio * GAUGE_STEPS);
+  // 切り捨て(docs/01 §9.4 の例: 4,520 / 6,000 = 0.753 → ▓ 7 つ)。
+  const filled = Math.floor(ratio * GAUGE_STEPS);
   return "▓".repeat(filled) + "░".repeat(GAUGE_STEPS - filled);
 }
 

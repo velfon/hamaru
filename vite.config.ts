@@ -42,12 +42,13 @@ export default defineConfig({
         globPatterns: ["**/*.{js,css,html,woff2,png,svg,webmanifest}"],
         cleanupOutdatedCaches: true,
         navigateFallback: "index.html",
+        // 初回訪問でも SW がそのタブを制御する(= 次のリロードからオフラインで起動できる)。
+        clientsClaim: true,
       },
       devOptions: {
-        // 開発サーバでも SW を登録する(E2E の offline シナリオ用。docs/06 §5)。
-        enabled: true,
-        type: "module",
-        navigateFallback: "index.html",
+        // 開発サーバでは SW を登録しない。E2E の offline シナリオは
+        // 本番ビルド(`vite preview`)に対して実行する(docs/06 §10 実装ノート N-3)。
+        enabled: false,
       },
     }),
   ],
