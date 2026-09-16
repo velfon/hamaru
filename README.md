@@ -12,8 +12,8 @@
 | フェーズ | 状態 |
 |---|---|
 | 1. 設計 | 完了(2026-09-17) |
-| 2. 実装 v1.0(Opus 5) | 進行中 — M0 骨組み / M1 コア / M2 シミュレーション 完了、M3 UI 以降が未着手([docs/07-implementation-plan.md](docs/07-implementation-plan.md)) |
-| 3. 自律改善ループ稼働 | 未着手 |
+| 2. 実装 v1.0(Opus 5) | M0〜M6 のコードは完了。公開と改善ループの稼働は人間の準備待ち([docs/07 §5 N-7](docs/07-implementation-plan.md)) |
+| 3. 自律改善ループ稼働 | 未稼働(`KAIZEN_ENABLED` 未設定) |
 
 ## 開発(実装後)
 
@@ -23,5 +23,7 @@ npm run dev        # http://localhost:5173
 npm run check      # config 検証・型・lint・i18n
 npm test           # 単体
 npm run sim        # ヘッドレスシミュレーション
-npm run build && npx wrangler dev   # 本番相当
+npm run cf:dev     # 本番相当(Worker + 静的資産)http://localhost:8787
+npm run test:e2e   # Playwright
+npm run metrics:pull -- --dry-run   # 発行する SQL を表示
 ```
