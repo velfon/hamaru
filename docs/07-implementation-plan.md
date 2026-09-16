@@ -105,3 +105,34 @@ H2〜H4 が無くてもローカル開発(M1〜M3)は進められる。
 - 設計書との差分: 03 §5 の「戻る」を 180→160ms(理由: ...)。docs 更新済み
 - 次: M4
 ```
+
+## 5. 実装ノート(実装者が設計書の曖昧さを解消した記録)
+
+### N-1. `npm run check` の構成はマイルストーンとともに育てる(M0)
+M0 の「未実装スクリプトは `echo TODO && exit 1`」と、M0 受け入れ条件「`npm run check` が通る」は
+そのままでは両立しない(`check` は `validate:config` と `i18n:check` を含むため)。
+もっとも単純な解釈として、**`check` は「その時点で実装済みのサブチェックだけ」を連結する**ことにした。
+
+| 時点 | `npm run check` の中身 |
+|---|---|
+| M0 | `typecheck && lint` |
+| M1 | `validate:config && typecheck && lint` |
+| M3(i18n 実装後) | `validate:config && typecheck && lint && i18n:check` |
+
+未実装の `i18n:check` / `golden:update`(M1 で実装)/ `metrics:pull` / `experiment:eval` / `deploy` は
+指示どおり `echo TODO && exit 1` のまま置いてある。
+
+### N-2. `prettier --check` は `format:check` という別スクリプト(M0)
+CLAUDE.md と 02 §8 は `check = validate:config + typecheck + lint + i18n:check` と定義しており
+prettier を含まない。一方 06 §1 の G1 ジョブは `prettier --check` を含む。
+スクリプト定義は 02 §8 に合わせ、prettier は `npm run format:check` として独立させた。
+CI(M5)の `check` ジョブは `npm run check && npm run format:check` の 2 コマンドを実行する。
+
+### N-3. カバレッジゲートは `npm run test:coverage`(M1)
+02 §8 の `npm run test = vitest run` を維持し、カバレッジ付き実行は `npm run test:coverage`
+(`vitest run --coverage`)とした。しきい値(`src/core/**` の行 95 %)は `vitest.config.ts` の
+`coverage.thresholds` に定義済みで、G2 はこのスクリプトを実行する。
+
+### N-4. M0 で作るディレクトリは M0〜M2 で必要なものだけ
+02 §2 のツリーのうち、`src/ui`・`src/telemetry`・`src/storage`・`src/i18n`・`worker/`・
+`.github/` などは中身のあるファイルを作る M3 以降で追加する(空ディレクトリは git に載らないため)。

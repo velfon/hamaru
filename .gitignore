@@ -6,3 +6,4 @@ sim/out/
 test-results/
 playwright-report/
 .DS_Store
+coverage/
