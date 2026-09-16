@@ -166,3 +166,13 @@ Pixel 7 / iPhone 15 のエミュレーションでも Pointer Events は発火�
 (これで epoch 前の `dailyNo` が負になる不具合を見つけた)。
 WebKit では sendBeacon の Blob 本文を Playwright が読めない(`postData()` が null)ため、
 **WebKit だけ sendBeacon を無効化して `fetch(keepalive)` 経路で送らせる**。Chromium は sendBeacon 経路を検証する。
+
+### N-10. G4 の実験バリアントは「明らかな破壊」だけを落とす(§4)
+`npm run sim -- --variant <name> --check` は帯域外でも失敗にしない(実験なので帯域を外れてよい)。
+失敗にするのは **random.median_moves が baseline の 50 % 未満**と、**`fitGuarantee: oneOfThree` なのに初手で詰む**ときだけ
+(`sim/report.ts` の `variantCheckOk`)。
+
+### N-11. Lighthouse CI の設定(§6)
+`lighthouserc.json`。モバイルは Lighthouse の既定(`preset` を指定しない)。`vite preview` の本番ビルドに対して
+`/` と `/#/play` を 3 回ずつ測り、中央値で判定する。lhci はハッシュ違いの URL を同じ URL として集計するので、
+アサーションは実質 1 URL・6 回分の中央値になる。`@lhci/cli` は依存に入れず、CI で `npx @lhci/cli@0.15.1` を使う。

@@ -389,3 +389,16 @@ Worker は DOM ではなく workerd のランタイム型で検査する。`work
 `public/_headers` は `vite build` で `dist/_headers` にコピーされ、`wrangler dev` 上で
 HTML に CSP / nosniff、`/assets/*` に `immutable` が付くことを curl で確認した。
 Worker 側でヘッダを足す必要はない。
+
+### N-10. ブラウザは config を zod で検証しない(§4.4 / §9)
+M5 で Lighthouse CI(モバイル・擬似スロットリング)を回すと **LCP 1.70 秒**で予算 1.5 秒を超えた。
+LCP 要素は JS が描く文字で、内訳の 73 % が描画待ち(JS のダウンロードと実行)。初回 JS 47 KB のうち約 6 割が zod だった。
+「HTML に静的な骨組みを置く」案も比べたが、ゲーム画面は JS 依存のまま残るので、全画面に効く次の形にした。
+
+- `src/config/index.ts` は JSON をそのまま型付けして使い、`resolveConfig` は `validate` を**渡されたときだけ**再検証する
+  (Node 側の sim / テストは zod の検証関数を渡す)。`resolve.ts` / `index.ts` は schema を型としてしか import しない(単体テストで検査)。
+- 代わりに `npm run validate:config` が **全実験(concluded 以外)× 全バリアント × 両モードの解決結果**を zod で検証する。
+  `npm run build` は `validate:config && vite build`、CI の G1 と deploy も必ず先に通すので、範囲外の config は配信されない。
+
+結果: 初回 JS **47.35 → 22.04 KB gzip**、LCP **1.70 → 1.39 秒**(ローカルの lhci、3 回の中央値)。
+§4.4 手順 4 の「失敗なら base にフォールバック」は、実行時ではなくビルド時に失敗させる形になった。

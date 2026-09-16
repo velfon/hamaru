@@ -3,7 +3,8 @@
  */
 import { cyrb53 } from "../core/rng";
 import type { Mode, ResolvedConfig } from "../core/types";
-import { safeParseGameConfig } from "./schema";
+// schema.ts(zod)は**型だけ**を import する。値を import するとブラウザのバンドルに zod が入る
+// (docs/02 §11 N-10)。実行時の再検証は `validate` を渡したときだけ行う。
 import type { ConfigOverride, Experiment, ExperimentsFile } from "./schema";
 
 const BUCKETS = 10_000;
@@ -83,9 +84,18 @@ export function forceDaily(config: ResolvedConfig): ResolvedConfig {
   });
 }
 
+export type ConfigValidator = (
+  input: unknown,
+) => { ok: true; config: ResolvedConfig } | { ok: false; error: string };
+
 /**
- * base config に実験オーバーライドを deep-merge し、デイリーの強制を適用して再検証する。
- * 再検証に失敗したら base(デイリーなら強制適用後の base)へフォールバックし、`onError` を呼ぶ。
+ * base config に実験オーバーライドを deep-merge し、デイリーの強制を適用する。
+ * `validate` を渡したら再検証し、失敗なら base(デイリーなら強制適用後の base)へフォールバックして
+ * `onError` を呼ぶ。
+ *
+ * ブラウザは `validate` を渡さない。全実験 × 全バリアント × 両モードの解決結果は
+ * `npm run validate:config`(ビルドの前に必ず走る)が zod で検証済みなので、同じ入力から
+ * 同じ結果になる実行時の解決は再検証しなくてよい(docs/02 §11 N-10)。
  *
  * 実装ノート(docs/02 §11 N-2): 02 §4.4 は「失敗なら error イベントを送る」とあるが、
  * config 層は telemetry を import できない(依存方向)。代わりに `onError` コールバックを受け、
@@ -97,6 +107,7 @@ export function resolveConfig(
   installId: string,
   mode: Mode,
   onError?: (message: string) => void,
+  validate?: ConfigValidator,
 ): ResolvedConfig {
   const fallback = mode === "daily" ? forceDaily(deepClone(base)) : deepClone(base);
 
@@ -116,10 +127,37 @@ export function resolveConfig(
   let merged = deepMerge(deepClone(base), override);
   if (mode === "daily") merged = forceDaily(merged);
 
-  const parsed = safeParseGameConfig(merged);
+  if (validate === undefined) return merged;
+  const parsed = validate(merged);
   if (!parsed.ok) {
     onError?.(`experiment ${exp.id} / ${assignment.variant} の解決結果が不正: ${parsed.error}`);
     return fallback;
   }
   return parsed.config;
+}
+
+/**
+ * 全実験 × 全バリアント × 両モードの解決結果を並べる(`validate:config` 用)。
+ * 実行時にあり得る config をすべて列挙するので、これを検証すれば実行時の再検証は要らない。
+ */
+export function allResolutions(
+  base: ResolvedConfig,
+  experiments: ExperimentsFile,
+): Array<{ label: string; config: unknown }> {
+  const out: Array<{ label: string; config: unknown }> = [
+    { label: "base / endless", config: deepClone(base) },
+    { label: "base / daily", config: forceDaily(deepClone(base)) },
+  ];
+  for (const exp of experiments.experiments) {
+    if (exp.status === "concluded") continue;
+    for (const [variant, override] of Object.entries(exp.variants)) {
+      const merged = deepMerge(deepClone(base), override);
+      out.push({ label: `${exp.id} / ${variant} / endless`, config: merged });
+      out.push({
+        label: `${exp.id} / ${variant} / daily`,
+        config: forceDaily(exp.lockedInDaily ? deepClone(base) : merged),
+      });
+    }
+  }
+  return out;
 }

@@ -1,8 +1,10 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { DEFAULT_CONFIG, DEFAULT_EXPERIMENTS } from "../../src/config";
 import gameConfigJson from "../../src/config/game-config.json";
 import experimentsJson from "../../src/config/experiments.json";
 import {
+  allResolutions,
   assignVariant,
   deepMerge,
   forceDaily,
@@ -384,6 +386,7 @@ describe("config / resolveConfig", () => {
       "install-1",
       "endless",
       (m) => messages.push(m),
+      safeParseGameConfig,
     );
     expect(r.board.size).toBe(10);
     expect(messages).toHaveLength(1);
@@ -440,5 +443,54 @@ describe("config / Node ローダ", () => {
   it("存在しないパスは例外", async () => {
     const { loadGameConfig } = await import("../../src/config/load");
     expect(() => loadGameConfig("no/such/file.json")).toThrow();
+  });
+});
+
+describe("config / ブラウザのバンドルに zod を入れない(docs/02 §11 N-10)", () => {
+  const read = (p: string) => readFileSync(new URL(`../../${p}`, import.meta.url), "utf8");
+
+  it.each(["src/config/index.ts", "src/config/resolve.ts"])(
+    "%s は zod / schema を値として import しない",
+    (path) => {
+      const imports = read(path)
+        .split("\n")
+        .filter((l) => /^import\s/.test(l) || /^export \* from/.test(l));
+      for (const line of imports) {
+        if (/zod|schema/.test(line)) expect(line).toMatch(/^(import|export) type /);
+      }
+    },
+  );
+
+  it("validate を渡さなければ再検証しない(ビルド時に検証済みの前提)", () => {
+    const exp = clone(EXP) as unknown as {
+      allocation: Record<string, number>;
+      variants: Record<string, unknown>;
+    };
+    exp.allocation = { treatment: 1 };
+    exp.variants = { treatment: { board: { size: 99 } } };
+    const r = resolveConfig(DEFAULT_CONFIG, fileWith(exp as unknown as Experiment), "i", "endless");
+    expect(r.board.size).toBe(99);
+  });
+
+  it("allResolutions は base と、未完了の実験の全バリアント × 両モードを並べる", () => {
+    const concluded = { ...clone(EXP), id: "EXP-0001", status: "concluded" as const };
+    const labels = allResolutions(DEFAULT_CONFIG, {
+      schemaVersion: 1,
+      experiments: [concluded, clone(EXP)],
+    }).map((x) => x.label);
+    expect(labels).toEqual([
+      "base / endless",
+      "base / daily",
+      "EXP-0003 / control / endless",
+      "EXP-0003 / control / daily",
+      "EXP-0003 / treatment / endless",
+      "EXP-0003 / treatment / daily",
+    ]);
+  });
+
+  it("allResolutions の結果はすべてスキーマを通る(現在の JSON)", () => {
+    for (const { label, config } of allResolutions(DEFAULT_CONFIG, DEFAULT_EXPERIMENTS)) {
+      expect(safeParseGameConfig(config).ok, label).toBe(true);
+    }
   });
 });

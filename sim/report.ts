@@ -177,6 +177,18 @@ export function checkAgainstBaseline(current: SimReport, baseline: SimReport): C
   };
 }
 
+/**
+ * 実験の treatment を `--variant` で走らせたときの合否(docs/06 §4)。
+ * 実験は帯域を外れてよい(外れたら PR 本文に理由を書く)。失敗にするのは
+ * **random.median_moves が baseline の 50 % 未満(明らかに壊れている)** ときと、
+ * `fitGuarantee: oneOfThree` なのに初手で詰むゲームがあるときだけ。
+ */
+export function variantCheckOk(result: CheckResult, fitGuarantee: string): boolean {
+  const fatal = result.bands.some((b) => b.fatal);
+  const roundOne = fitGuarantee === "oneOfThree" && result.gameOverViolations.length > 0;
+  return !fatal && !roundOne;
+}
+
 /* ------------------------------------------------------------------ */
 /* 表示                                                                */
 /* ------------------------------------------------------------------ */

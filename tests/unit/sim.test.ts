@@ -13,6 +13,7 @@ import {
   BAND,
   buildBotReport,
   checkAgainstBaseline,
+  variantCheckOk,
   describe as describeDist,
   median,
   percentile,
@@ -123,6 +124,19 @@ describe("sim / 帯域判定", () => {
     const r = checkAgainstBaseline(report(100, 1000, 1), report(100, 1000));
     expect(r.ok).toBe(false);
     expect(r.gameOverViolations).toEqual(["random"]);
+  });
+
+  it("variant は帯域外でもよいが、50 % 未満の破壊と(oneOfThree での)初手詰みは落とす", () => {
+    const outOfBand = checkAgainstBaseline(report(69, 1000), report(100, 1000));
+    expect(outOfBand.ok).toBe(false);
+    expect(variantCheckOk(outOfBand, "oneOfThree")).toBe(true);
+
+    const broken = checkAgainstBaseline(report(40, 1000), report(100, 1000));
+    expect(variantCheckOk(broken, "oneOfThree")).toBe(false);
+
+    const roundOne = checkAgainstBaseline(report(100, 1000, 1), report(100, 1000));
+    expect(variantCheckOk(roundOne, "oneOfThree")).toBe(false);
+    expect(variantCheckOk(roundOne, "none")).toBe(true);
   });
 
   it("baseline に無いボットは skip する", () => {

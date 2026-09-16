@@ -24,6 +24,7 @@ import {
   checkAgainstBaseline,
   formatCheck,
   formatReport,
+  variantCheckOk,
   type GameOutcome,
   type SimReport,
 } from "./report";
@@ -224,6 +225,17 @@ function main(argv: readonly string[]): number {
     const baseline = JSON.parse(readFileSync(BASELINE_PATH, "utf8")) as SimReport;
     const result = checkAgainstBaseline(report, baseline);
     console.log("\n" + formatCheck(result));
+    if (options.variant !== null) {
+      // 実験の treatment は帯域外でもよい。明らかな破壊だけを落とす(docs/06 §4)。
+      const config = applyVariant(loadGameConfig(options.configPath), options.variant);
+      const ok = variantCheckOk(result, config.pieces.fitGuarantee);
+      console.log(
+        ok
+          ? `variant "${options.variant}": 明らかな破壊なし(帯域外は PR 本文に理由を書く)`
+          : `variant "${options.variant}": 明らかに壊れています(random.median_moves が baseline の 50 % 未満、または初手で詰む)`,
+      );
+      return ok ? 0 : 1;
+    }
     return result.ok ? 0 : 1;
   }
   return 0;

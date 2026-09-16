@@ -10,3 +10,4 @@ dev-dist
 
 worker-configuration.d.ts
 .wrangler
+.lighthouseci

@@ -14,7 +14,7 @@
   },
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "npm run validate:config && vite build",
     "preview": "vite preview",
     "check": "npm run validate:config && npm run typecheck && npm run lint && npm run i18n:check",
     "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.worker.json",
