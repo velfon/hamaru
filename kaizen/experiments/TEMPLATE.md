@@ -1,0 +1,11 @@
+# EXP-XXXX: <一言タイトル>
+- 起票: YYYY-MM-DD  / 状態: running | concluded
+- 背景(指標): <どの指標が、どう、なぜ気になるか。数値を書く>
+- 仮説: <X を変えると Y が Z だけ動く。理由は W>
+- 変更: <config のキーと値。treatment のみ>
+- 主要指標: <docs/04 §5 のメトリクス ID。1 つ>
+- ガードレール: crash_free ≥ control − 0.5pt / median_game_seconds 120〜600 / abandon_rate ≤ control + 3pt
+- 最小サンプル: <N> install / 腕、最大 <D> 日
+- 期待効果: <+X %。根拠(sim の数値など)>
+- 判定基準: docs/05 §6.3 の規則に従う。恣意的な早期終了はしない。
+- 結果(judge が追記): 
