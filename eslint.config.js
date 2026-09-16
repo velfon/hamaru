@@ -39,6 +39,7 @@ export default tseslint.config(
       "node_modules/**",
       "sim/out/**",
       "tests/unit/golden/*.json",
+      "worker-configuration.d.ts",
     ],
   },
   js.configs.recommended,

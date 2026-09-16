@@ -30,10 +30,18 @@ function gauge(score: number, max: number): string {
   return "▓".repeat(filled) + "░".repeat(GAUGE_STEPS - filled);
 }
 
+/**
+ * 通算番号の表示。epoch より前の日(公開前・端末時計が過去)は 0 以下になるので、
+ * 「#-13」のような番号は出さずに省く(docs/01 §14 N-8)。
+ */
+export function dailyLabelNo(dailyNo: number | null): string {
+  return dailyNo !== null && dailyNo >= 1 ? ` #${dailyNo}` : "";
+}
+
 export function buildShareText(input: ShareInput): string {
   const score = new Intl.NumberFormat("en-US").format(input.score);
   const lines = [
-    `HAMARU Daily #${input.dailyNo} (${input.date})`,
+    `HAMARU Daily${dailyLabelNo(input.dailyNo)} (${input.date})`,
     `${score} pts · ${input.lines} lines · streak x${input.multiplier.toFixed(1)}`,
     gauge(input.score, input.gaugeMax),
     input.url,

@@ -17,7 +17,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "check": "npm run validate:config && npm run typecheck && npm run lint && npm run i18n:check",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.worker.json",
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
@@ -27,13 +27,16 @@
     "validate:config": "tsx scripts/validate-config.ts",
     "i18n:check": "tsx scripts/i18n-check.ts",
     "golden:update": "tsx scripts/golden-update.ts",
-    "metrics:pull": "echo TODO && exit 1",
-    "experiment:eval": "echo TODO && exit 1",
-    "deploy": "echo TODO && exit 1",
+    "metrics:pull": "tsx scripts/metrics-pull.ts",
+    "experiment:eval": "tsx scripts/experiment-eval.ts",
+    "deploy": "vite build && wrangler deploy --var APP_VERSION:${GIT_SHA:-dev}",
     "test:e2e": "playwright test",
-    "budget": "tsx scripts/size-budget.ts"
+    "budget": "tsx scripts/size-budget.ts",
+    "cf:types": "wrangler types",
+    "cf:dev": "vite build && wrangler dev --port 8787"
   },
   "dependencies": {
+    "web-vitals": "6.2.2",
     "zod": "4.6.5"
   },
   "devDependencies": {
@@ -49,6 +52,7 @@
     "typescript-eslint": "8.70.0",
     "vite": "8.3.0",
     "vite-plugin-pwa": "1.3.0",
-    "vitest": "4.1.11"
+    "vitest": "4.1.11",
+    "wrangler": "4.132.0"
   }
 }

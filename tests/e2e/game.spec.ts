@@ -1,15 +1,16 @@
 /**
  * docs/06 §5 の E2E シナリオ: smoke / clear / gameover / resume / keyboard / reduced-motion。
  */
-import { expect, test } from "@playwright/test";
+import { expect } from "@playwright/test";
 import {
   almostDead,
   almostFullRow,
   dragPiece,
+  expectEvent,
   gotoState,
   grabPiece,
   makeState,
-  telemetryEvents,
+  test,
   waitForBoardLayout,
 } from "./helpers";
 
@@ -88,8 +89,7 @@ test("gameover: 詰みの盤で置くとオーバーレイ → もう一度で�
   await expect(page.getByTestId("final-score")).toHaveText("4,201");
   await expect(overlay.getByTestId("retry")).toBeVisible();
 
-  const events = await telemetryEvents(page);
-  expect(events.some((e) => e["event"] === "game_end" && e["reason"] === "over")).toBe(true);
+  await expectEvent(page, (e) => e["event"] === "game_end" && e["reason"] === "over");
 
   await overlay.getByTestId("retry").click();
   await expect(overlay).toBeHidden();

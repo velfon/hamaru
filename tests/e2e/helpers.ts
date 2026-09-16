@@ -5,7 +5,8 @@
  * (開発ビルドのみ。docs/06 §5)。テスト側は core をそのまま import して作るので、
  * 「テスト用のダミー直列化」を二重に持たなくて済む。
  */
-import type { Page } from "@playwright/test";
+import { test as base, type BrowserContext, type Page } from "@playwright/test";
+import { batchSchema } from "../../worker/schema";
 import { serialize } from "../../src/core/game";
 import type { GameState, Mode, Piece } from "../../src/core/types";
 
@@ -151,10 +152,84 @@ export async function dragPiece(page: Page, slot: number, x: number, y: number):
   await drop();
 }
 
-/** テレメトリのメモリ内キュー(開発ビルドのみ公開。M4 で送信になる)。 */
+/*
+ * テレメトリの捕捉(docs/06 §5 `telemetry`、docs/04 §9)。
+ *
+ * すべてのテストで `POST /api/events` を横取りし、本文を **Worker と同じ zod スキーマ**で
+ * 検証してから 204 を返す。1 件でもスキーマ違反があればそのテストを失敗させる。
+ * dev サーバには Worker が無いので、横取りしないと送信失敗 → localStorage 退避になり、
+ * テストごとに状態が変わってしまう。
+ */
+interface Captured {
+  events: Array<Record<string, unknown>>;
+  invalid: string[];
+}
+
+const captured = new WeakMap<BrowserContext, Captured>();
+
+export const test = base.extend<{ telemetryCapture: Captured }>({
+  telemetryCapture: [
+    async ({ context, browserName }, use) => {
+      const box: Captured = { events: [], invalid: [] };
+      captured.set(context, box);
+      if (browserName === "webkit") {
+        // WebKit では sendBeacon の Blob 本文を Playwright が読めない(postData() が null)。
+        // WebKit だけ sendBeacon を「使えない」扱いにし、fetch(keepalive)経路で送らせる。
+        // Chromium は sendBeacon 経路のまま検証する(docs/06 §9 N-9)。
+        await context.addInitScript(() => {
+          Object.defineProperty(navigator, "sendBeacon", {
+            configurable: true,
+            value: () => false,
+          });
+        });
+      }
+      await context.route("**/api/events", async (route) => {
+        const request = route.request();
+        let body: unknown = null;
+        try {
+          body = JSON.parse(request.postData() ?? "");
+        } catch {
+          box.invalid.push("JSON ではない本文");
+        }
+        const parsed = batchSchema.safeParse(body);
+        if (parsed.success) {
+          box.events.push(...(parsed.data.events as Array<Record<string, unknown>>));
+          await route.fulfill({ status: 204 });
+        } else {
+          box.invalid.push(parsed.error.message);
+          await route.fulfill({ status: 400 });
+        }
+      });
+      await use(box);
+      if (box.invalid.length > 0) {
+        throw new Error(`/api/events にスキーマ違反の送信がありました:\n${box.invalid.join("\n")}`);
+      }
+    },
+    { auto: true },
+  ],
+});
+
+/** 送信済み(捕捉したもの)+ 未送信のメモリ内キュー。 */
 export async function telemetryEvents(page: Page): Promise<Array<Record<string, unknown>>> {
-  return page.evaluate(() => {
+  const queued = await page.evaluate(() => {
     const api = (window as unknown as { __hamaru?: { telemetry: () => unknown[] } }).__hamaru;
     return (api?.telemetry() ?? []) as Array<Record<string, unknown>>;
   });
+  return [...(captured.get(page.context())?.events ?? []), ...queued];
+}
+
+/** 送信済みのイベント(`/api/events` に実際に届いたもの)だけ。 */
+export function sentEvents(page: Page): Array<Record<string, unknown>> {
+  return captured.get(page.context())?.events ?? [];
+}
+
+/** 条件を満たすイベントが(送信は非同期なので)現れるまで待つ。 */
+export async function expectEvent(
+  page: Page,
+  predicate: (e: Record<string, unknown>) => boolean,
+): Promise<Record<string, unknown>> {
+  await base.expect.poll(async () => (await telemetryEvents(page)).some(predicate)).toBe(true);
+  const found = (await telemetryEvents(page)).find(predicate);
+  if (found === undefined) throw new Error("unreachable");
+  return found;
 }

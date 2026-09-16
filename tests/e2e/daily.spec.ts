@@ -2,8 +2,8 @@
  * docs/06 §5 の `daily` シナリオ。
  * デイリー開始 → 終了 → 結果カード → 共有 → ホームに「達成」。
  */
-import { expect, test } from "@playwright/test";
-import { almostDead, dragPiece, gotoState, makeState, telemetryEvents } from "./helpers";
+import { expect } from "@playwright/test";
+import { almostDead, dragPiece, expectEvent, gotoState, makeState, test } from "./helpers";
 
 const deadDaily = () =>
   makeState({
@@ -22,11 +22,11 @@ test("daily: ホームから開始できる", async ({ page }) => {
   await expect(page.getByTestId("daily-state")).toBeVisible();
   await page.getByTestId("daily-play").click();
   await expect(page.getByTestId("board")).toBeVisible();
-  await expect(page.getByTestId("modetag")).toContainText("#");
+  // 通算番号は epoch(2026-10-01)より前の日は出ない(docs/01 §14 N-8)ので、ラベルだけを見る。
+  await expect(page.getByTestId("modetag")).toContainText("Today's challenge");
 
-  const events = await telemetryEvents(page);
-  const start = events.find((e) => e["event"] === "game_start");
-  expect(start?.["mode"]).toBe("daily");
+  const start = await expectEvent(page, (e) => e["event"] === "game_start");
+  expect(start["mode"]).toBe("daily");
 });
 
 test("daily: 終了 → 共有(share)→ ホームに達成が出る", async ({ page }) => {
@@ -49,13 +49,12 @@ test("daily: 終了 → 共有(share)→ ホームに達成が出る", async ({ 
   await overlay.getByTestId("share").click();
 
   const shared = await page.evaluate(() => (window as unknown as { __shared?: string }).__shared);
-  expect(shared).toContain("HAMARU Daily #");
+  expect(shared).toMatch(/^HAMARU Daily( #\d+)? \(\d{4}-\d{2}-\d{2}\)/);
   expect(shared).toContain("3,001 pts · 12 lines");
   expect(shared).toMatch(/[▓░]{10}/);
 
-  const events = await telemetryEvents(page);
-  expect(events.some((e) => e["event"] === "daily_result")).toBe(true);
-  expect(events.some((e) => e["event"] === "share" && e["method"] === "share")).toBe(true);
+  await expectEvent(page, (e) => e["event"] === "daily_result");
+  await expectEvent(page, (e) => e["event"] === "share" && e["method"] === "share");
 
   await overlay.getByTestId("over-home").click();
   await expect(page.getByTestId("daily-state")).toHaveText(/3,001/);
@@ -86,10 +85,9 @@ test("daily: navigator.share が無ければクリップボードにコピーし
 
   await expect(page.getByTestId("toast")).toBeVisible();
   const copied = await page.evaluate(() => (window as unknown as { __copied?: string }).__copied);
-  expect(copied).toContain("HAMARU Daily #");
+  expect(copied).toMatch(/^HAMARU Daily( #\d+)? \(\d{4}-\d{2}-\d{2}\)/);
 
-  const events = await telemetryEvents(page);
-  expect(events.some((e) => e["event"] === "share" && e["method"] === "copy")).toBe(true);
+  await expectEvent(page, (e) => e["event"] === "share" && e["method"] === "copy");
 });
 
 test("daily: 達成後は練習で再挑戦でき、記録は上書きしない", async ({ page }) => {

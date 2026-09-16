@@ -159,3 +159,10 @@ Pixel 7 / iPhone 15 のエミュレーションでも Pointer Events は発火�
 ドラッグ補助(`tests/e2e/helpers.ts`)はマウスで統一している。
 このため `config.input.touchLiftOffset`(指の上にピースを持ち上げる量)は E2E では効かず、
 **実機のタッチ操作は手動確認**に残る(§5 のデバイス一覧は画面サイズの検証として機能している)。
+
+### N-9. E2E は全テストで `/api/events` を横取りしてスキーマ検証する(§5)
+`tests/e2e/helpers.ts` の自動フィクスチャが `context.route("**/api/events")` で送信を捕捉し、
+本文を **Worker と同じ `batchSchema`** で検証して 204 を返す。違反が 1 件でもあればそのテストは失敗する
+(これで epoch 前の `dailyNo` が負になる不具合を見つけた)。
+WebKit では sendBeacon の Blob 本文を Playwright が読めない(`postData()` が null)ため、
+**WebKit だけ sendBeacon を無効化して `fetch(keepalive)` 経路で送らせる**。Chromium は sendBeacon 経路を検証する。

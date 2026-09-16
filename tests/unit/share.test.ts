@@ -7,7 +7,7 @@
  *   https://<host>/#/daily
  */
 import { describe, expect, it } from "vitest";
-import { buildShareText, GAUGE_STEPS, type ShareInput } from "../../src/ui/share";
+import { buildShareText, dailyLabelNo, GAUGE_STEPS, type ShareInput } from "../../src/ui/share";
 
 const base: ShareInput = {
   dailyNo: 12,
@@ -33,6 +33,14 @@ describe("buildShareText", () => {
         "https://hamaru.example/#/daily",
       ].join("\n"),
     );
+  });
+
+  it("epoch より前(通算番号 0 以下)は番号を出さない", () => {
+    const text = buildShareText({ ...base, dailyNo: -13, date: "2026-09-17" });
+    expect(text.split("\n")[0]).toBe("HAMARU Daily (2026-09-17)");
+    expect(dailyLabelNo(0)).toBe("");
+    expect(dailyLabelNo(null)).toBe("");
+    expect(dailyLabelNo(1)).toBe(" #1");
   });
 
   it("ゲージは 10 段階", () => {

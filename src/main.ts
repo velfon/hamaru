@@ -18,6 +18,7 @@ import {
   type Settings,
 } from "./storage/local";
 import { detectPlatform, getQueue, initTelemetry, track, updateContext } from "./telemetry/client";
+import { initVitals } from "./telemetry/vitals";
 import { createRouter, type Route } from "./ui/router";
 import { aboutScreen } from "./ui/screens/about";
 import { gameScreen } from "./ui/screens/game";
@@ -141,6 +142,7 @@ function boot(): void {
   );
 
   track({ event: "session_start", ref: detectRef() });
+  if (gpc !== true) initVitals();
 
   installErrorHandlers();
   watchSession();

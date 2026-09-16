@@ -77,3 +77,10 @@ export type EventFields =
   | ({ event: "vital" } & VitalFields);
 
 export type TelemetryEvent = CommonFields & Record<string, unknown>;
+
+/**
+ * 送信される 1 イベントの完全な形(共通フィールド + イベント固有フィールド)。
+ * `worker/schema.ts` の zod がこの型と一致することを
+ * `tests/unit/telemetry-contract.test.ts` が型レベルで検証する(docs/04 §9)。
+ */
+export type ClientEvent = Omit<CommonFields, "event"> & EventFields;

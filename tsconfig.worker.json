@@ -1,0 +1,10 @@
+{
+  // Worker は DOM ではなく workerd のランタイム型で検査する(docs/02 §7)。
+  // `worker-configuration.d.ts` は `npm run cf:types`(= `wrangler types`)が生成する。
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "lib": ["ES2022"],
+    "types": []
+  },
+  "include": ["worker", "worker-configuration.d.ts"]
+}

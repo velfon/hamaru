@@ -226,3 +226,18 @@ AE が JOIN / CTE をサポートしない場合は、`first_seen` と日別 ins
 - 単体: クライアントのキューが 20 件で分割される、失敗時に localStorage へ退避する、200 件で古いものから捨てる。
 - E2E: 1 ゲーム完了で `POST /api/events` が `game_start` → `game_end` を含むこと(Playwright の route で捕捉)。
 - 契約テスト: `src/telemetry/events.ts` の型と `worker/schema.ts` の zod が一致(型レベル `Expect<Equal<...>>`)。
+
+## 10. 実装ノート(実装フェーズで解消した曖昧さ)
+
+### N-1. `error.kind` は blob12(§4)
+§4 の表は blob11 に `stackHash` / `kind` の両方を割り当てていたが、`error` イベントは
+**両方を同時に持つ**ので 1 列では足りない。既存の位置は動かさず、§1-4「追記のみ」に従って
+**blob12 = `kind`** を足した。現在の使用数は blob 12 / double 12 / index 1。
+
+| AE 列 | 内容 |
+|---|---|
+| `blob12` | イベント固有の文字列 3(`kind`) |
+
+### N-2. `daily_result.dailyNo` は整数なら 0 以下も受け取る(§3)
+epoch より前の日は `dailyNo` が 0 以下になる(docs/01 §14 N-8)。Worker が 1 件でも弾くと
+バッチごと失われ `daily_completion` が欠けるので、スキーマは「整数」だけを要求する。

@@ -18,7 +18,7 @@
   "game.best": "Best",
   "game.streak": "Streak",
   "game.back": "Back to home",
-  "game.daily": "Today's challenge #{n}",
+  "game.daily": "Today's challenge{no}",
   "game.practice": "Practice",
   "game.endless": "Endless",
   "fx.boardClear": "Board clear +{n}",

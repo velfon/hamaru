@@ -5,7 +5,8 @@
  * これだけは**本番ビルド**(`vite preview`、4173)に対して実行する。
  * 開発サーバはモジュールを都度配信するため precache の検証にならない。
  */
-import { expect, test } from "@playwright/test";
+import { expect } from "@playwright/test";
+import { test } from "./helpers";
 import { PREVIEW_URL } from "../../playwright.config";
 
 test.describe("offline", () => {

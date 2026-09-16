@@ -8,3 +8,5 @@ tests/unit/golden/*.json
 sim/baseline.json
 dev-dist
 
+worker-configuration.d.ts
+.wrangler

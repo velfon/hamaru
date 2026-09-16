@@ -18,7 +18,7 @@
   "game.best": "ベスト",
   "game.streak": "ストリーク",
   "game.back": "ホームへ戻る",
-  "game.daily": "今日の挑戦 #{n}",
+  "game.daily": "今日の挑戦{no}",
   "game.practice": "練習",
   "game.endless": "エンドレス",
   "fx.boardClear": "全消し +{n}",

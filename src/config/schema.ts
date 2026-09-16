@@ -8,6 +8,12 @@ import { z } from "zod";
 import { SHAPE_IDS } from "../core/shapes";
 import type { ResolvedConfig } from "../core/types";
 
+// 本番の CSP は `script-src` に 'unsafe-eval' を含まない(public/_headers)。
+// zod は既定で `new Function("")` を試して JIT の可否を調べ、例外は握りつぶすが、
+// ブラウザはそれを securitypolicyviolation として報告する。jitless で試行自体を止める
+// (docs/02 §11 N-7)。検証結果は変わらない。
+z.config({ jitless: true });
+
 const shapeIdSchema = z.enum([...SHAPE_IDS] as [string, ...string[]]);
 
 /** 形状の重み。0〜5(docs/02 §4.1)。 */

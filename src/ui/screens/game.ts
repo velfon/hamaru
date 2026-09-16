@@ -37,7 +37,7 @@ import {
 } from "../fx";
 import { createKeyboard } from "../keyboard";
 import { navigate, type Screen } from "../router";
-import { buildShareText, shareText } from "../share";
+import { buildShareText, shareText, dailyLabelNo } from "../share";
 import { getContext, settingsStore, statsStore, langStore } from "../store";
 import { createTrayView } from "../tray-view";
 
@@ -222,7 +222,7 @@ export function gameScreen(mode: Mode) {
 
     const modeTag = el("div", { class: "modetag", "data-testid": "modetag" }, [
       mode === "daily"
-        ? t("game.daily", { n: dailyNumber(startDate, config.daily.epoch) ?? 0 })
+        ? t("game.daily", { no: dailyLabelNo(dailyNumber(startDate, config.daily.epoch)) })
         : t("game.endless"),
       isPractice ? ` · ${t("game.practice")}` : "",
     ]);
@@ -551,7 +551,7 @@ export function gameScreen(mode: Mode) {
           : newGame(config, "endless", endlessSeed(ctx.installId, now), now);
       modeTag.textContent =
         (mode === "daily"
-          ? t("game.daily", { n: dailyNumber(startDate, config.daily.epoch) ?? 0 })
+          ? t("game.daily", { no: dailyLabelNo(dailyNumber(startDate, config.daily.epoch)) })
           : t("game.endless")) + (practice ? ` · ${t("game.practice")}` : "");
       renderAll();
       persist();

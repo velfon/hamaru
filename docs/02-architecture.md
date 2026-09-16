@@ -372,3 +372,20 @@ config 層は telemetry を import できない(§2 の依存方向)。
 M3 時点で JS 43.9 KB gzip(予算 60 KB)。うち約 6 割が zod(config / experiments の
 実行時検証)で、残りが UI + core。将来 60 KB に迫ったら、まず zod を
 「起動時は検証しない(ビルド時の `validate:config` に任せる)」形へ動かすのが効く。
+
+### N-7. zod は `jitless` で使う(§7 CSP)
+zod 4 は既定で `new Function("")` を試して JIT の可否を調べる。例外は握りつぶされるが、
+`public/_headers` の CSP(`script-src` は `'self'` のみ)の下ではブラウザが
+`securitypolicyviolation` を報告し、コンソールにエラーが出る。
+`src/config/schema.ts` の先頭で `z.config({ jitless: true })` を呼び、試行そのものを止めた。
+検証結果は同じ。`wrangler dev` 上で Chromium / WebKit とも CSP 違反 0 件を確認している。
+
+### N-8. Worker の型検査は別 tsconfig(§7)
+Worker は DOM ではなく workerd のランタイム型で検査する。`worker-configuration.d.ts` は
+`npm run cf:types`(= `wrangler types`)の生成物でコミット対象、lint / prettier の対象外。
+`npm run typecheck` は `tsc --noEmit && tsc --noEmit -p tsconfig.worker.json` の 2 段。
+
+### N-9. `_headers` は Workers Static Assets がそのまま解釈する(§7)
+`public/_headers` は `vite build` で `dist/_headers` にコピーされ、`wrangler dev` 上で
+HTML に CSP / nosniff、`/assets/*` に `immutable` が付くことを curl で確認した。
+Worker 側でヘッダを足す必要はない。

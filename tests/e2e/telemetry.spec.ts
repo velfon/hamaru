@@ -1,13 +1,21 @@
 /**
  * docs/06 §5 の `telemetry` シナリオ。
  *
- * 実装ノート: M3 の `track()` は**メモリ内キューだけ**で、送信(`POST /api/events`)は
- * M4 の担当(docs/07 §1)。そこで M3 では「イベントが正しい瞬間に、docs/04 §2 の
- * 共通フィールド付きで積まれること」を検証する。M4 で輸送を実装したら、この spec に
- * リクエスト捕捉を足す(検証対象のイベント名・フィールドは変わらない)。
+ * M4: `POST /api/events` は `helpers.ts` の自動フィクスチャが全テストで横取りし、
+ * 本文を Worker と同じ zod スキーマで検証する(違反があればテスト失敗)。
+ * ここでは「正しい瞬間に積まれ、game_end で実際に送信されること」を見る。
  */
-import { expect, test } from "@playwright/test";
-import { almostDead, dragPiece, gotoState, makeState, telemetryEvents } from "./helpers";
+import { expect } from "@playwright/test";
+import {
+  almostDead,
+  dragPiece,
+  expectEvent,
+  gotoState,
+  makeState,
+  sentEvents,
+  telemetryEvents,
+  test,
+} from "./helpers";
 
 const COMMON = [
   "event",
@@ -43,10 +51,11 @@ test("起動で session_start、ゲームで game_start → game_end が積ま�
   await dragPiece(page, 0, 0, 0);
   await expect(page.getByTestId("gameover")).toBeVisible({ timeout: 10_000 });
 
-  events = await telemetryEvents(page);
-  const names = events.map((e) => e["event"]);
-  expect(names).toContain("game_start");
-  expect(names).toContain("game_end");
+  // game_end は即フラッシュされる(docs/02 §6)ので、Worker に届いた分だけを見る。
+  await expect
+    .poll(() => sentEvents(page).map((e) => e["event"]))
+    .toEqual(expect.arrayContaining(["session_start", "game_start", "game_end"]));
+  events = sentEvents(page);
 
   const start = events.find((e) => e["event"] === "game_start");
   expect(start?.["mode"]).toBe("endless");
@@ -70,8 +79,7 @@ test("「はじめから」で途中のゲームを捨てると game_end(abandon
   await page.getByTestId("endless-restart").click();
   await expect(page.getByTestId("score")).toHaveText("0");
 
-  const events = await telemetryEvents(page);
-  expect(events.some((e) => e["event"] === "game_end" && e["reason"] === "abandon")).toBe(true);
+  await expectEvent(page, (e) => e["event"] === "game_end" && e["reason"] === "abandon");
 });
 
 test("ゲームを離れても game_end は積まれない(離脱 = 一時停止)", async ({ page }) => {
@@ -83,4 +91,16 @@ test("ゲームを離れても game_end は積まれない(離脱 = 一時停止
   const events = await telemetryEvents(page);
   expect(events.some((e) => e["event"] === "game_start")).toBe(true);
   expect(events.some((e) => e["event"] === "game_end")).toBe(false);
+});
+
+test("タブが非表示になると未送信分を送る(visibilitychange → hidden)", async ({ page }) => {
+  await page.goto("/");
+  await expect(page.getByTestId("home-screen")).toBeVisible();
+  expect(sentEvents(page).some((e) => e["event"] === "session_start")).toBe(false);
+
+  await page.evaluate(() => {
+    Object.defineProperty(document, "visibilityState", { configurable: true, get: () => "hidden" });
+    document.dispatchEvent(new Event("visibilitychange"));
+  });
+  await expect.poll(() => sentEvents(page).some((e) => e["event"] === "session_start")).toBe(true);
 });

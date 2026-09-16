@@ -2,8 +2,8 @@
  * docs/06 §5 の `settings` シナリオ。
  * 言語切替で文言が変わる / テーマ切替 / データ削除で統計が 0。
  */
-import { expect, test } from "@playwright/test";
-import { dragPiece, grabPiece } from "./helpers";
+import { expect } from "@playwright/test";
+import { dragPiece, grabPiece, test } from "./helpers";
 
 test("言語を切り替えると文言が変わり、再読み込みしても残る", async ({ page }) => {
   await page.goto("/#/settings");
