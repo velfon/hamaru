@@ -16,6 +16,11 @@ permissions:
   issues: write
   id-token: write
 
+# シェルを明示すると GitHub は bash -eo pipefail で実行する(省略時は -e だけで、`cmd | tee` の失敗を見逃す)
+defaults:
+  run:
+    shell: bash
+
 jobs:
   weekly:
     if: vars.KAIZEN_ENABLED == 'true'
@@ -36,7 +41,7 @@ jobs:
       - name: digest draft
         id: digest
         run: |
-          latest=$(ls kaizen/metrics | grep -E '^[0-9]{4}-[0-9]{2}-[0-9]{2}\.json$' | sort | tail -1 | cut -c1-10)
+          latest=$(ls kaizen/metrics | grep -E '^[0-9]{4}-[0-9]{2}-[0-9]{2}\.json$' | sort | tail -1 | cut -c1-10 || true)
           npm run kaizen:digest -- --date "${latest:-$(date -u +%F)}"
       - uses: anthropics/claude-code-action@v1
         with:

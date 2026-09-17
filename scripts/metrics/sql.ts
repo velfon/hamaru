@@ -24,6 +24,14 @@ export const BUCKET = {
   cls: 0.005,
 } as const;
 
+/**
+ * 数値リテラルを浮動小数として書く(`8` → `8.0`)。
+ * AE の `if()` は 2 つの分岐の型が一致しないと 422 になる(Double と Integer の混在。2026-09-17 に実データで確認)。
+ */
+export function float(n: number): string {
+  return Number.isInteger(n) ? `${n}.0` : String(n);
+}
+
 /** epoch ms → `toDateTime('YYYY-MM-DD HH:MM:SS')`(UTC)。 */
 export function dt(ms: number): string {
   const iso = new Date(ms).toISOString();
@@ -120,7 +128,7 @@ export function vitalsHistSql(r: Range): string {
   blob5 AS platform,
   blob4 AS lang,
   blob10 AS name,
-  floor(double11 / if(blob10 = 'CLS', ${BUCKET.cls}, if(blob10 = 'INP', ${BUCKET.inpMs}, ${BUCKET.lcpMs}))) AS bucket,
+  floor(double11 / if(blob10 = 'CLS', ${float(BUCKET.cls)}, if(blob10 = 'INP', ${float(BUCKET.inpMs)}, ${float(BUCKET.lcpMs)}))) AS bucket,
   sum(_sample_interval) AS n
 FROM ${DATASET}
 WHERE blob1 = 'vital' AND ${between(r)}

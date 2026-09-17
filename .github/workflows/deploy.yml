@@ -10,18 +10,22 @@ on:
       - "**/*.md"
   workflow_dispatch:
 
-# デプロイの追い越しを防ぐ
-concurrency:
-  group: deploy
-  cancel-in-progress: false
-
 permissions:
   contents: read
+
+# シェルを明示すると GitHub は bash -eo pipefail で実行する(省略時は -e だけで、`cmd | tee` の失敗を見逃す)
+defaults:
+  run:
+    shell: bash
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    # デプロイの追い越しを防ぐ。ジョブ単位にして、canary の 30 分待ちが次のデプロイを止めないようにする
+    concurrency:
+      group: deploy-job
+      cancel-in-progress: false
     outputs:
       deployed: ${{ steps.secrets.outputs.ok }}
       url: ${{ steps.deploy.outputs.url }}
@@ -98,6 +102,10 @@ jobs:
     if: needs.deploy.outputs.deployed == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 50
+    # 新しいデプロイが来たら古い版の判定はやめる(直近の窓に新旧の版が混ざるため)
+    concurrency:
+      group: canary
+      cancel-in-progress: true
     permissions:
       contents: write
       pull-requests: write

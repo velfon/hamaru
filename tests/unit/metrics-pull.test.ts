@@ -229,6 +229,17 @@ describe("SQL(AE の方言)", () => {
     expect(dt(Date.parse("2026-10-01T00:00:00Z"))).toBe("toDateTime('2026-10-01 00:00:00')");
   });
 
+  it("if() の分岐は同じ型(浮動小数)にそろえる(AE は Double と Integer の混在を 422 で拒否する)", () => {
+    expect(vitalsHistSql(r)).toContain("if(blob10 = 'CLS', 0.005, if(blob10 = 'INP', 8.0, 50.0))");
+    for (const q of all) {
+      for (const m of q.matchAll(/if\([^,]+,\s*([^,()]+),\s*([^,()]+)\)/g)) {
+        expect(/^\d+$/.test((m[1] ?? "").trim()) === /^\d+$/.test((m[2] ?? "").trim()), m[0]).toBe(
+          true,
+        );
+      }
+    }
+  });
+
   it("件数はすべて _sample_interval で重み付けする", () => {
     for (const q of [durationHistSql(r), scoreHistSql(r), vitalsHistSql(r), topErrorsSql(r, 0)]) {
       expect(q).toContain("_sample_interval");

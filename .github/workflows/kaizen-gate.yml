@@ -20,6 +20,11 @@ permissions:
   issues: write
   actions: write
 
+# シェルを明示すると GitHub は bash -eo pipefail で実行する(省略時は -e だけで、`cmd | tee` の失敗を見逃す)
+defaults:
+  run:
+    shell: bash
+
 jobs:
   gate:
     if: >-

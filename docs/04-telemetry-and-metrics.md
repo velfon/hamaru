@@ -254,3 +254,11 @@ Analytics Engine ではそのまま動かない。リファレンスで確認し
 リポジトリは public なので、`kaizen/metrics/` にコミットするのは集計値(`<date>.json`)と判定(`<date>-decision.json`)だけ。
 実験判定の入力 `<date>-installs.json`(install ID ごとの行)は `.gitignore` に入れ、ワークフローの実行中だけ使う。
 Actions の artifact からも除外する(public リポジトリの artifact は GitHub アカウントがあれば誰でも取得できるため)。
+
+### N-8. 実データで分かった方言の制約(2026-09-17)
+Metrics check ワークフローで本物の SQL API に投げて確認した。
+- 認証(Account Analytics: Read のトークン)、`countIf` / `sumIf` / `max(_sample_interval)` / `min(toUnixTimestamp(timestamp))` /
+  `toUnixTimestamp(toStartOfDay(timestamp))` / `floor()` / `HAVING` / `toDateTime('YYYY-MM-DD HH:MM:SS')` / `ORDER BY … LIMIT … OFFSET` /
+  `FORMAT JSONEachRow` は通った(セッション行・初回日・所要時間・スコアの 4 クエリが成功)。
+- **`if()` の 2 つの分岐は同じ型でなければならない**。`if(c, 0.005, if(c2, 8, 50))` は
+  「Double and Integer」で 422 になった。数値リテラルは `float()` で `8.0` の形にそろえる(回帰テストあり)。

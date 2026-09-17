@@ -352,3 +352,8 @@ revert PR は GITHUB_TOKEN 名義なので CI が自動では走らない(`needs
   **`gh pr merge` と任意の `node` / `curl` は許可しない**。`git push` は許可するので、main への直接 push を防ぐのは**ブランチ保護**(必須)。
 - 未マージの `kaizen` PR が残っていれば、その日は metrics を取らずに終わる(1 日 1 PR、積み上げない)。
 - 週次の数字は `scripts/kaizen-digest.ts` が草稿に書き、エージェントは解釈だけを書く。
+
+### N-9. ワークフローは `shell: bash` を明示する(§7)
+GitHub Actions はシェル省略時に `bash -e` で実行し、`pipefail` が付かない。`npm run metrics:pull | tee log` の失敗を見逃して
+指標なしで Claude が起動しかねないので、全ワークフローで `defaults.run.shell: bash`(= `bash -eo pipefail`)にした。
+また Deploy の同時実行制限はワークフロー全体ではなく deploy ジョブに付け、canary の 30 分待ちが次のデプロイを止めないようにした。
