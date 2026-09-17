@@ -165,10 +165,16 @@ Chromium / WebKit での CSP 違反 0 件・Service Worker 登録・送信 204 �
 | H3 | GitHub Secrets: `CLOUDFLARE_API_TOKEN`、`CLOUDFLARE_ACCOUNT_ID`、`ANTHROPIC_API_KEY` **または** `CLAUDE_CODE_OAUTH_TOKEN` | 未 |
 | H4 | GitHub Variables: `KAIZEN_ENABLED=false`、`KAIZEN_AUTOMERGE=false`(任意で `PUBLIC_URL`、`KAIZEN_BOT_LOGINS`) | 未 |
 | H5 | `main` のブランチ保護: 必須チェック `check, unit, golden, sim, e2e, budget, change-class, audit`、直接 push 禁止(管理者含む) | 未 |
-| H6 | **Cloudflare ダッシュボードで Workers Analytics Engine を有効化**(これが無いと `wrangler deploy` が code 10089 で失敗する) | 未 |
+| H6 | **Cloudflare ダッシュボードで Workers Analytics Engine を有効化**(これが無いと `wrangler deploy` が code 10089 で失敗する。有効化後も反映に 1〜2 分かかった) | 済(2026-09-17) |
 | H7 | **Claude GitHub App** をリポジトリにインストール(https://github.com/apps/claude)。PR が `claude[bot]` 名義になり CI が走る | 未 |
 | H8 | Settings › Actions › General: 「Allow GitHub Actions to create and approve pull requests」を ON(canary の revert PR 用) | 未 |
 
 H6 の後にローカルで `GIT_SHA=$(git rev-parse --short=7 HEAD) npm run deploy`、または H2〜H3 の後に Actions の Deploy を手動実行すると公開される。
 改善ループは H2〜H8 がすべて済んでから `KAIZEN_ENABLED=true` にする。最初は `KAIZEN_AUTOMERGE=false` のまま、
 Kaizen daily を workflow_dispatch で 1 回動かし、PR の中身を人間が確認する(M6 の受け入れ)。
+
+### N-8. 初回公開(2026-09-17)
+`https://hamaru.lovenf.workers.dev`(版 3806f6b)。この Mac の wrangler(OAuth)から手動デプロイした。
+公開 URL で `/api/health`、トップ、CSP / nosniff、404、別オリジン 403 を curl で、Chromium / WebKit で CSP 違反 0・
+Service Worker 登録・`/api/events` 204 を確認した。GitHub Actions からの自動デプロイは H2〜H3 の後に有効になる。
+Deploy ワークフローのヘルスチェックはこの URL を出力から拾う(`vars.PUBLIC_URL` でも指定できる)。
