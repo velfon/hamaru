@@ -215,7 +215,7 @@ jobs:
           PR: ${{ github.event.pull_request.number }}
           SHA: ${{ github.event.pull_request.head.sha }}
         run: |
-          npm run build
+          VITE_APP_VERSION="pr-${PR}-${SHA:0:7}" npm run build
           # プレビューは本番の指標に書き込まない(TELEMETRY=off。docs/02 §11 N-11)
           npx wrangler versions upload \
             --preview-alias "pr-${PR}" \

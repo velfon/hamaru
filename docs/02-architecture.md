@@ -408,3 +408,10 @@ LCP 要素は JS が描く文字で、内訳の 73 % が描画待ち(JS のダ�
 で上げる(URL は `pr-<n>-hamaru.<subdomain>.workers.dev`)。プレビューは本番と同じ Analytics Engine データセットに
 バインドされるため、Worker は `TELEMETRY=off` のとき**検証だけして書き込まない**。`/api/health` は `telemetry` の真偽も返す。
 `wrangler types` はリテラル型を生成するので `npm run cf:types` は `--strict-vars=false` を付ける。
+
+### N-12. デプロイはクライアントと Worker に同じ版を入れ、必ず config を検証する(§8)
+2026-09-17 の Metrics check で、テレメトリの `version` が常に `"dev"` だと分かった。クライアントはビルド時の
+`VITE_APP_VERSION` を読むが、`npm run deploy` は Worker の `APP_VERSION` しか設定していなかった。
+また `deploy` が `vite build` を直接呼び、N-10 の前提である `validate:config` を通っていなかった。
+`deploy` を `validate:config && VITE_APP_VERSION=$GIT_SHA vite build && wrangler deploy --var APP_VERSION:$GIT_SHA` に直し、
+`tests/unit/scripts-contract.test.ts` でこの順序と版の注入を固定した。PR プレビューも `VITE_APP_VERSION=pr-<n>-<sha>` でビルドする。

@@ -29,11 +29,11 @@
     "golden:update": "tsx scripts/golden-update.ts",
     "metrics:pull": "tsx scripts/metrics-pull.ts",
     "experiment:eval": "tsx scripts/experiment-eval.ts",
-    "deploy": "vite build && wrangler deploy --var APP_VERSION:${GIT_SHA:-dev}",
+    "deploy": "npm run validate:config && VITE_APP_VERSION=${GIT_SHA:-dev} vite build && wrangler deploy --var APP_VERSION:${GIT_SHA:-dev}",
     "test:e2e": "playwright test",
     "budget": "tsx scripts/size-budget.ts",
     "cf:types": "wrangler types --strict-vars=false",
-    "cf:dev": "vite build && wrangler dev --port 8787",
+    "cf:dev": "npm run build && wrangler dev --port 8787",
     "kaizen:digest": "tsx scripts/kaizen-digest.ts",
     "canary": "tsx scripts/canary.ts",
     "change-class": "tsx scripts/change-class.ts"
