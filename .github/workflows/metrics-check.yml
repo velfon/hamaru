@@ -1,0 +1,50 @@
+# 指標取得の手動確認(docs/04 §6)。Analytics Engine の SQL API が実データで通るかを見る。
+# 出力は集計値の要約だけ。install 単位の行は残さない(artifact も作らない)。
+name: Metrics check
+
+on:
+  workflow_dispatch:
+    inputs:
+      date:
+        description: "集計日 YYYY-MM-DD(この日の 00:00 UTC まで。空なら今日。当日分を含めたいなら明日の日付)"
+        required: false
+        default: ""
+      days:
+        description: "窓の日数(7〜90)"
+        required: false
+        default: "7"
+
+permissions:
+  contents: read
+
+jobs:
+  pull:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - name: metrics:pull
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          DATE: ${{ inputs.date }}
+          DAYS: ${{ inputs.days }}
+        run: |
+          args="--days ${DAYS:-7} --out metrics-out"
+          if [ -n "$DATE" ]; then args="$args --date $DATE"; fi
+          npm run metrics:pull -- $args
+      - name: summary
+        if: success()
+        run: |
+          node -e '
+            const fs = require("fs");
+            const f = fs.readdirSync("metrics-out").find((x) => /^\d{4}-\d{2}-\d{2}\.json$/.test(x));
+            const r = JSON.parse(fs.readFileSync("metrics-out/" + f, "utf8"));
+            const pick = (m) => m && { sessions: m.sessions, installs_active: m.installs_active, games: m.games, crash_free: m.crash_free, lcp_p75: m.lcp_p75 };
+            console.log(JSON.stringify({ date: r.date, version: r.version, d1: pick(r.overall.d1), d7: pick(r.overall.d7), sampling: r.sampling, topErrors: r.topErrors.length }, null, 2));
+          ' | tee -a "$GITHUB_STEP_SUMMARY"
