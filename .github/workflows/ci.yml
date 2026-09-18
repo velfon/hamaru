@@ -222,7 +222,8 @@ jobs:
             --tag "pr-${PR}" \
             --message "PR #${PR} ${SHA:0:7}" \
             --var "APP_VERSION:pr-${PR}-${SHA:0:7}" \
-            --var "TELEMETRY:off" | tee upload.log
+            --var "TELEMETRY:off" \
+            --var "LEADERBOARD:off" | tee upload.log
           url=$(grep -oE "https://pr-${PR}-[a-z0-9.-]+\.workers\.dev" upload.log | head -1 || true)
           echo "url=${url}" >> "$GITHUB_OUTPUT"
       - if: steps.secrets.outputs.ok == 'true' && steps.upload.outputs.url != ''

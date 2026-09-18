@@ -8,7 +8,14 @@ import { el } from "../dom";
 import { navigate, type Screen } from "../router";
 
 export function aboutScreen(container: HTMLElement): Screen {
-  const items = ["about.item1", "about.item2", "about.item3", "about.item4", "about.item5"];
+  const items = [
+    "about.item1",
+    "about.item2",
+    "about.item3",
+    "about.item4",
+    "about.item5",
+    "about.item6",
+  ];
 
   const screen = el("div", { class: "screen", "data-testid": "about-screen" }, [
     el("div", { class: "topbar" }, [

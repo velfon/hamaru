@@ -77,7 +77,15 @@ export function homeScreen(container: HTMLElement): Screen {
       testId: "daily-play",
       onClick: () => navigate(todayResult ? "/daily?practice=1" : "/daily"),
     }),
-    el("div", { class: "card__meta" }, [countdown]),
+    el("div", { class: "card__meta card__meta--split" }, [
+      countdown,
+      button({
+        label: t("home.ranking"),
+        variant: "ghost",
+        testId: "ranking-link",
+        onClick: () => navigate("/ranking"),
+      }),
+    ]),
   ]);
 
   function renderCountdown(): void {

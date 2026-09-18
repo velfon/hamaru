@@ -415,3 +415,13 @@ LCP 要素は JS が描く文字で、内訳の 73 % が描画待ち(JS のダ�
 また `deploy` が `vite build` を直接呼び、N-10 の前提である `validate:config` を通っていなかった。
 `deploy` を `validate:config && VITE_APP_VERSION=$GIT_SHA vite build && wrangler deploy --var APP_VERSION:$GIT_SHA` に直し、
 `tests/unit/scripts-contract.test.ts` でこの順序と版の注入を固定した。PR プレビューも `VITE_APP_VERSION=pr-<n>-<sha>` でビルドする。
+
+### N-13. ランキング(docs/08)の構成
+- Worker の経路に `/api/daily/submit` `/api/leaderboard` `/api/leaderboard/me` `/api/profile` `/api/profile/delete` を追加(`worker/leaderboard.ts`)。
+  POST はすべて Origin 検査。installId は本文で送り、URL には載せない
+- D1 バインディング `DB`(`hamaru`)。スキーマは `migrations/`(human-only)。deploy.yml がデプロイ前に `d1 migrations apply --remote`
+- `LEADERBOARD=off` で書き込みを止める(PR プレビュー)。`TELEMETRY=off` と同じ考え方
+- 得点は `src/core/replay.ts` で手の列を再生して決める。Worker は `src/config` と `src/core` をそのままバンドルする
+- 単体テストは wrangler の `getPlatformProxy` で**本物のローカル D1** を立て、`migrations/` を適用して SQL ごと検証する
+  (`tests/fixtures/wrangler.d1-test.jsonc` は D1 だけの設定。CI の unit ジョブはビルドしないので静的資産を要求しない形にした)
+- 初回 JS は 25.98 KB gzip(ランキング画面を含む)

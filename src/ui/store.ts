@@ -51,6 +51,7 @@ export const settingsStore = createStore<Settings>({
   haptics: true,
   motion: "system",
   previewClears: true,
+  leaderboard: true,
 });
 
 export const statsStore = createStore<Stats>({

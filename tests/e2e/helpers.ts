@@ -163,14 +163,50 @@ export async function dragPiece(page: Page, slot: number, x: number, y: number):
 interface Captured {
   events: Array<Record<string, unknown>>;
   invalid: string[];
+  /** ランキング API への POST(本文)。docs/08 §6 */
+  leaderboard: Array<{ path: string; body: Record<string, unknown> }>;
 }
+
+/** ランキング API の既定の応答(テストごとに page.route で上書きできる)。 */
+export const MOCK_RANKS = {
+  daily: { rank: 12, score: 3001, count: 348 },
+  week: { rank: 3, score: 9000, count: 120, days: 3 },
+  month: { rank: 5, score: 20000, count: 400, days: 7 },
+  all: { rank: 40, score: 50000, count: 900, days: 20 },
+};
+
+export const MOCK_TOP = (period: string) => ({
+  period,
+  key: "k",
+  count: 3,
+  top: [
+    {
+      rank: 1,
+      name: { auto: [0, 1, 1203] },
+      score: 9870,
+      ...(period === "daily" ? {} : { days: 4 }),
+    },
+    {
+      rank: 2,
+      name: { nickname: "こはる" },
+      score: 9410,
+      ...(period === "daily" ? {} : { days: 3 }),
+    },
+    {
+      rank: 3,
+      name: { auto: [5, 7, 42] },
+      score: 8800,
+      ...(period === "daily" ? {} : { days: 2 }),
+    },
+  ],
+});
 
 const captured = new WeakMap<BrowserContext, Captured>();
 
 export const test = base.extend<{ telemetryCapture: Captured }>({
   telemetryCapture: [
     async ({ context, browserName }, use) => {
-      const box: Captured = { events: [], invalid: [] };
+      const box: Captured = { events: [], invalid: [], leaderboard: [] };
       captured.set(context, box);
       if (browserName === "webkit") {
         // WebKit では sendBeacon の Blob 本文を Playwright が読めない(postData() が null)。
@@ -200,6 +236,52 @@ export const test = base.extend<{ telemetryCapture: Captured }>({
           await route.fulfill({ status: 400 });
         }
       });
+      // ランキング API(dev サーバには Worker が無いので横取りする)。
+      await context.route(
+        /\/api\/(daily\/submit|leaderboard(\/me)?|profile(\/delete)?)(\?.*)?$/,
+        async (route) => {
+          const request = route.request();
+          const url = new URL(request.url());
+          const body = (() => {
+            try {
+              return JSON.parse(request.postData() ?? "{}") as Record<string, unknown>;
+            } catch {
+              return {};
+            }
+          })();
+          if (request.method() === "POST") box.leaderboard.push({ path: url.pathname, body });
+          const json = (status: number, data: unknown) =>
+            route.fulfill({ status, contentType: "application/json", body: JSON.stringify(data) });
+          switch (url.pathname) {
+            case "/api/daily/submit":
+              return json(200, { accepted: true, score: 3001, lines: 12, ranks: MOCK_RANKS });
+            case "/api/leaderboard":
+              return json(200, MOCK_TOP(url.searchParams.get("period") ?? "daily"));
+            case "/api/leaderboard/me": {
+              const period = String(body["period"] ?? "daily") as keyof typeof MOCK_RANKS;
+              return json(200, {
+                period,
+                key: "k",
+                ...MOCK_RANKS[period],
+                rank: 2,
+                name: { auto: [1, 0, 421] },
+              });
+            }
+            case "/api/profile":
+              return body["nickname"] === "公式スタッフ"
+                ? json(400, { error: "banned" })
+                : json(200, {
+                    name:
+                      body["nickname"] === null
+                        ? { auto: [1, 0, 421] }
+                        : { nickname: body["nickname"] },
+                  });
+            case "/api/profile/delete":
+              return route.fulfill({ status: 204 });
+          }
+          return route.fulfill({ status: 404 });
+        },
+      );
       await use(box);
       if (box.invalid.length > 0) {
         throw new Error(`/api/events にスキーマ違反の送信がありました:\n${box.invalid.join("\n")}`);
@@ -216,6 +298,13 @@ export async function telemetryEvents(page: Page): Promise<Array<Record<string, 
     return (api?.telemetry() ?? []) as Array<Record<string, unknown>>;
   });
   return [...(captured.get(page.context())?.events ?? []), ...queued];
+}
+
+/** ランキング API に届いた POST。 */
+export function leaderboardPosts(
+  page: Page,
+): Array<{ path: string; body: Record<string, unknown> }> {
+  return captured.get(page.context())?.leaderboard ?? [];
 }
 
 /** 送信済みのイベント(`/api/events` に実際に届いたもの)だけ。 */
