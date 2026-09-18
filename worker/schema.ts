@@ -99,3 +99,39 @@ export function parseBatch(
   const r = batchSchema.safeParse(input);
   return r.success ? { ok: true, batch: r.data } : { ok: false, error: z.prettifyError(r.error) };
 }
+
+/* ------------------------------------------------------------------ */
+/* ランキング(docs/08 §6)                                              */
+/* ------------------------------------------------------------------ */
+
+export const PERIODS = ["daily", "week", "month", "all"] as const;
+export type Period = (typeof PERIODS)[number];
+
+/** 1 手 = [トレイの位置 0〜2, x, y]。盤は最大 12×12(config の上限)なので座標は 0〜11。 */
+const move = z.tuple([
+  z.number().int().min(0).max(2),
+  z.number().int().min(0).max(11),
+  z.number().int().min(0).max(11),
+]);
+
+export const submitSchema = z.strictObject({
+  installId: z.uuid(),
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  moves: z.array(move).min(1).max(2000),
+  version: z.string().max(SHORT),
+});
+
+export const meSchema = z.strictObject({
+  installId: z.uuid(),
+  period: z.enum(PERIODS),
+  key: z.string().max(16).optional(),
+});
+
+export const profileSchema = z.strictObject({
+  installId: z.uuid(),
+  nickname: z.string().max(64).nullable(),
+});
+
+export const deleteSchema = z.strictObject({
+  installId: z.uuid(),
+});

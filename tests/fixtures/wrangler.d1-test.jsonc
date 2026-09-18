@@ -1,0 +1,12 @@
+// 単体テスト専用(tests/unit/leaderboard.test.ts)。wrangler の getPlatformProxy でローカルの D1 だけを使う。
+{
+  "name": "hamaru-test",
+  "compatibility_date": "2026-09-01",
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "hamaru-test",
+      "database_id": "00000000-0000-0000-0000-000000000000",
+    },
+  ],
+}

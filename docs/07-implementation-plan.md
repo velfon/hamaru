@@ -178,3 +178,11 @@ Kaizen daily を workflow_dispatch で 1 回動かし、PR の中身を人間が
 公開 URL で `/api/health`、トップ、CSP / nosniff、404、別オリジン 403 を curl で、Chromium / WebKit で CSP 違反 0・
 Service Worker 登録・`/api/events` 204 を確認した。GitHub Actions からの自動デプロイは H2〜H3 の後に有効になる。
 Deploy ワークフローのヘルスチェックはこの URL を出力から拾う(`vars.PUBLIC_URL` でも指定できる)。
+
+### N-9. ランキングで増えた人間の作業(2026-09-18)
+| # | 作業 | 状態 |
+|---|---|---|
+| H9 | Cloudflare API トークンに **Account › D1: Edit** を追加(deploy.yml のマイグレーション適用に要る)。トークンの編集で権限を足せば値は変わらない | 未 |
+| H10 | 不適切なニックネームの削除(運用。docs/08 §5.2 のコマンド) | 随時 |
+
+D1(`hamaru`、APAC)の作成と初回のマイグレーション適用は、2026-09-18 にこの Mac の wrangler(OAuth)で実施済み。

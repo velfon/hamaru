@@ -20,6 +20,8 @@ export const KEYS = {
   dailyResults: "daily:results",
   telemetryQueue: "telemetry:queue",
   experiments: "experiments",
+  /** ランキングへの参加記録(docs/08 §3)。サーバのデータを消すべきかの判断に使う。 */
+  leaderboard: "leaderboard",
 } as const;
 
 export type StorageKey = (typeof KEYS)[keyof typeof KEYS];
@@ -172,6 +174,8 @@ export interface Settings {
   haptics: boolean;
   motion: MotionSetting;
   previewClears: boolean;
+  /** ランキングに参加する(デイリーの公式記録を送る)。docs/08 §3。 */
+  leaderboard: boolean;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -180,6 +184,7 @@ export const DEFAULT_SETTINGS: Settings = {
   haptics: true,
   motion: "system",
   previewClears: true,
+  leaderboard: true,
 };
 
 export interface Stats {
@@ -245,6 +250,7 @@ export function loadSettings(): Settings {
       haptics: pickBool(data["haptics"], DEFAULT_SETTINGS.haptics),
       motion: pickEnum(data["motion"], ["system", "always"] as const, DEFAULT_SETTINGS.motion),
       previewClears: pickBool(data["previewClears"], DEFAULT_SETTINGS.previewClears),
+      leaderboard: pickBool(data["leaderboard"], DEFAULT_SETTINGS.leaderboard),
     };
   });
   return v ?? { ...DEFAULT_SETTINGS };
@@ -351,6 +357,20 @@ export interface SavedGame {
   isPractice?: boolean;
   /** 集計済みのアクティブ時間(ms)。 */
   activeMs?: number;
+  /** デイリーのみ: 置いた手の列 [トレイ, x, y](ランキングの送信用。docs/08 §2)。 */
+  moves?: Array<[number, number, number]>;
+}
+
+function pickMoves(v: unknown): Array<[number, number, number]> | undefined {
+  if (!Array.isArray(v)) return undefined;
+  const out: Array<[number, number, number]> = [];
+  for (const m of v) {
+    if (!Array.isArray(m) || m.length !== 3 || !m.every((n) => Number.isInteger(n) && n >= 0)) {
+      return undefined;
+    }
+    out.push([m[0] as number, m[1] as number, m[2] as number]);
+  }
+  return out;
 }
 
 export function loadSavedGame(
@@ -366,8 +386,26 @@ export function loadSavedGame(
       date: typeof date === "string" ? date : undefined,
       isPractice: pickBool(data["isPractice"], false),
       activeMs: pickNumber(data["activeMs"], 0),
+      moves: pickMoves(data["moves"]),
     };
   });
+}
+
+/** ランキングへの参加記録。 */
+export interface LeaderboardRecord {
+  /** 一度でもサーバに記録した(「データを削除」でサーバ側も消す)。 */
+  participated: boolean;
+}
+
+export function loadLeaderboardRecord(): LeaderboardRecord {
+  const v = readKey<LeaderboardRecord>(KEYS.leaderboard, (data) =>
+    isRecord(data) ? { participated: pickBool(data["participated"], false) } : null,
+  );
+  return v ?? { participated: false };
+}
+
+export function saveLeaderboardRecord(r: LeaderboardRecord): void {
+  writeKey(KEYS.leaderboard, r);
 }
 
 export function saveSavedGame(

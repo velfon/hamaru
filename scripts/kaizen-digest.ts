@@ -11,23 +11,18 @@
  */
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { parseUtcDate, utcDateString } from "../src/core/daily";
+import { isoWeekKey, parseUtcDate, utcDateString } from "../src/core/daily";
 import type { Metrics } from "./metrics/aggregate";
 import type { MetricsReport } from "./metrics/report";
 import type { DecisionJson } from "./experiment/decide";
 
 const DAY = 86_400_000;
 
-/** ISO 8601 の週番号(例 2026-W42)。週はその週の木曜日が属する年に数える。 */
+/** ISO 8601 の週番号(例 2026-W42)。実装は core と共用(ランキングの週と同じ定義)。 */
 export function isoWeek(date: string): string {
-  const ms = parseUtcDate(date);
-  if (ms === null) throw new Error(`日付が不正です: ${date}`);
-  const dow = (new Date(ms).getUTCDay() + 6) % 7; // 月曜 = 0
-  const thursday = new Date(ms + (3 - dow) * DAY);
-  const year = thursday.getUTCFullYear();
-  const dayOfYear = Math.floor((thursday.getTime() - Date.UTC(year, 0, 1)) / DAY);
-  const week = Math.floor(dayOfYear / 7) + 1;
-  return `${year}-W${String(week).padStart(2, "0")}`;
+  const key = isoWeekKey(date);
+  if (key === null) throw new Error(`日付が不正です: ${date}`);
+  return key;
 }
 
 export const DIGEST_METRICS: ReadonlyArray<

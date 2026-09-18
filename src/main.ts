@@ -22,6 +22,7 @@ import { initVitals } from "./telemetry/vitals";
 import { createRouter, type Route } from "./ui/router";
 import { aboutScreen } from "./ui/screens/about";
 import { gameScreen } from "./ui/screens/game";
+import { rankingScreen } from "./ui/screens/ranking";
 import { homeScreen } from "./ui/screens/home";
 import { settingsScreen } from "./ui/screens/settings";
 import { langStore, setContext, settingsStore, statsStore } from "./ui/store";
@@ -153,6 +154,7 @@ function boot(): void {
     { path: "/daily", screen: gameScreen("daily") },
     { path: "/settings", screen: (container) => settingsScreen(container) },
     { path: "/about", screen: (container) => aboutScreen(container) },
+    { path: "/ranking", screen: rankingScreen },
   ];
 
   const router = createRouter(app, routes);

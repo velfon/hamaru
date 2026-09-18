@@ -538,3 +538,28 @@
     max-height: var(--board);
   }
 }
+
+/* ランキングの順位(docs/08 §7)。送信中・失敗は控えめに */
+.overlay__rank {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 4px 0 14px;
+  color: var(--ink);
+}
+
+.overlay__rank b {
+  font-family: var(--font-display);
+  font-weight: 700;
+  color: var(--kintsugi);
+}
+
+.overlay__rank span {
+  color: var(--ink-muted);
+  font-size: var(--fs-small);
+}
+
+.overlay__rank--muted {
+  color: var(--ink-muted);
+  font-size: var(--fs-small);
+}

@@ -48,3 +48,22 @@ export function msUntilNextUtcDay(nowMs: number): number {
   const rem = ((nowMs % MS_PER_DAY) + MS_PER_DAY) % MS_PER_DAY;
   return MS_PER_DAY - rem;
 }
+
+/**
+ * ISO 8601 の週キー(例 2026-W38)。週はその週の木曜日が属する年に数える。
+ * ランキングの週(docs/08 §4)と週次ダイジェストで共用する。不正な日付なら null。
+ */
+export function isoWeekKey(date: string): string | null {
+  const ms = parseUtcDate(date);
+  if (ms === null) return null;
+  const dow = (new Date(ms).getUTCDay() + 6) % 7; // 月曜 = 0
+  const thursday = new Date(ms + (3 - dow) * MS_PER_DAY);
+  const year = thursday.getUTCFullYear();
+  const dayOfYear = Math.floor((thursday.getTime() - Date.UTC(year, 0, 1)) / MS_PER_DAY);
+  return `${year}-W${String(Math.floor(dayOfYear / 7) + 1).padStart(2, "0")}`;
+}
+
+/** 月キー(例 2026-09)。不正な日付なら null。 */
+export function monthKey(date: string): string | null {
+  return parseUtcDate(date) === null ? null : date.slice(0, 7);
+}

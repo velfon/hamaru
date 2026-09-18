@@ -4,13 +4,20 @@
  * バージョン / プライバシーへのリンク。
  */
 import { t } from "../../i18n";
-import { clearAll, DEFAULT_SETTINGS, DEFAULT_STATS, type Settings } from "../../storage/local";
+import {
+  clearAll,
+  DEFAULT_SETTINGS,
+  DEFAULT_STATS,
+  loadLeaderboardRecord,
+  type Settings,
+} from "../../storage/local";
 import { button, iconButton, ICON_BACK } from "../components/button";
 import { confirmDialog } from "../components/dialog";
 import { toast } from "../components/toast";
 import { el, svg } from "../dom";
 import { navigate, type Screen } from "../router";
-import { settingsStore, statsStore } from "../store";
+import { deleteProfile } from "../leaderboard-api";
+import { getContext, settingsStore, statsStore } from "../store";
 
 const APP_VERSION = import.meta.env["VITE_APP_VERSION"] ?? "dev";
 
@@ -41,7 +48,11 @@ function select<K extends keyof Settings>(
   return node;
 }
 
-function toggle(key: "haptics" | "previewClears", label: string, testId: string): HTMLElement {
+function toggle(
+  key: "haptics" | "previewClears" | "leaderboard",
+  label: string,
+  testId: string,
+): HTMLElement {
   const input = el("input", {
     type: "checkbox",
     "data-testid": testId,
@@ -105,6 +116,11 @@ export function settingsScreen(container: HTMLElement): Screen {
         ),
       ),
       row(t("settings.preview"), toggle("previewClears", t("settings.preview"), "setting-preview")),
+      row(
+        t("settings.leaderboard"),
+        toggle("leaderboard", t("settings.leaderboard"), "setting-leaderboard"),
+        t("settings.leaderboard.hint"),
+      ),
     ]),
     el("div", { class: "rows" }, [
       el("a", { class: "row row--link", href: "#/about", "data-testid": "about-link" }, [
@@ -130,6 +146,8 @@ export function settingsScreen(container: HTMLElement): Screen {
       testId: "reset-dialog",
     });
     if (!ok) return;
+    // ランキングに記録したことがあれば、サーバの記録も消す(docs/08 §3)。失敗しても端末側は消す。
+    if (loadLeaderboardRecord().participated) await deleteProfile(getContext().installId);
     clearAll();
     statsStore.set({ ...DEFAULT_STATS });
     settingsStore.set({ ...DEFAULT_SETTINGS });

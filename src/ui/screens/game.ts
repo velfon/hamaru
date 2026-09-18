@@ -17,6 +17,7 @@ import {
   loadSavedGame,
   remove,
   saveDailyResult,
+  saveLeaderboardRecord,
   saveSavedGame,
   loadDailyResults,
 } from "../../storage/local";
@@ -25,6 +26,7 @@ import { createBoardView } from "../board-view";
 import { button, iconButton, ICON_BACK } from "../components/button";
 import { announce, toast } from "../components/toast";
 import { createDrag, type PlacementHost, type PlacementPreview } from "../drag";
+import { submitDaily, type Result, type SubmitJson } from "../leaderboard-api";
 import { el, systemPrefersReducedMotion } from "../dom";
 import {
   boardClearFx,
@@ -81,11 +83,18 @@ function fxOptions(config: ResolvedConfig): FxOptions {
   };
 }
 
+type MoveTuple = [number, number, number];
+
 interface StartInfo {
   state: GameState;
   isPractice: boolean;
   resumed: boolean;
   date: string;
+  /**
+   * デイリーで置いた手の列(ランキングの送信用。docs/08 §2)。
+   * 途中から再開したゲームで保存された手の数が合わないとき(機能の導入前に始めた等)は null。
+   */
+  moves: MoveTuple[] | null;
 }
 
 /**
@@ -112,7 +121,8 @@ function startGame(mode: Mode, query: URLSearchParams, config: ResolvedConfig): 
   const date = utcDateString(now);
   const seeded = seededState();
   if (seeded !== null && seeded.mode === mode) {
-    return { state: seeded, isPractice: false, resumed: false, date };
+    // 開発ビルドの E2E 専用。差し込んだ時点からの手を記録する(送信経路の検証用。本番では通らない)。
+    return { state: seeded, isPractice: false, resumed: false, date, moves: [] };
   }
 
   if (mode === "daily") {
@@ -126,7 +136,17 @@ function startGame(mode: Mode, query: URLSearchParams, config: ResolvedConfig): 
       saved.date === date &&
       savedState.status === "playing"
     ) {
-      return { state: savedState, isPractice: saved.isPractice === true, resumed: true, date };
+      const moves =
+        saved.moves !== undefined && saved.moves.length === savedState.moves
+          ? saved.moves.map((m): MoveTuple => [m[0], m[1], m[2]])
+          : null;
+      return {
+        state: savedState,
+        isPractice: saved.isPractice === true,
+        resumed: true,
+        date,
+        moves,
+      };
     }
     // 日付が変わっていれば破棄する(docs/01 §7.2)。
     if (saved !== null && saved.date !== date) remove(KEYS.gameDaily);
@@ -137,6 +157,7 @@ function startGame(mode: Mode, query: URLSearchParams, config: ResolvedConfig): 
       isPractice,
       resumed: false,
       date,
+      moves: [],
     };
   }
 
@@ -144,7 +165,7 @@ function startGame(mode: Mode, query: URLSearchParams, config: ResolvedConfig): 
   const savedState = saved === null ? null : deserialize(saved.state);
   if (query.get("new") !== "1") {
     if (savedState !== null && savedState.status === "playing") {
-      return { state: savedState, isPractice: false, resumed: true, date };
+      return { state: savedState, isPractice: false, resumed: true, date, moves: null };
     }
   } else if (savedState !== null && savedState.status === "playing" && savedState.moves > 0) {
     // 「はじめから」で途中のゲームを破棄した(docs/04 §3 `game_end` reason=abandon)。
@@ -168,6 +189,7 @@ function startGame(mode: Mode, query: URLSearchParams, config: ResolvedConfig): 
     isPractice: false,
     resumed: false,
     date,
+    moves: null,
   };
 }
 
@@ -183,6 +205,7 @@ export function gameScreen(mode: Mode) {
     let state = start.state;
     let isPractice = start.isPractice;
     const startDate = start.date;
+    let moves: MoveTuple[] | null = start.moves;
 
     /* -------------------------------------------------------------- */
     /* アクティブ時間(非表示中は止める。docs/04 §3 `durationMs`)         */
@@ -278,6 +301,7 @@ export function gameScreen(mode: Mode) {
         isPractice,
         activeMs,
         ...(mode === "daily" ? { date: startDate } : {}),
+        ...(mode === "daily" && moves !== null ? { moves } : {}),
       };
       saveSavedGame(mode === "daily" ? KEYS.gameDaily : KEYS.gameEndless, payload);
     }
@@ -314,6 +338,7 @@ export function gameScreen(mode: Mode) {
         const filledBefore = placeShape(state.board, state.size, shape, x, y);
         const { state: next, result } = place(state, config, index, x, y);
         if (!result.ok) return;
+        moves?.push([index, x, y]);
 
         const fx = fxOptions(config);
         state = next;
@@ -440,16 +465,71 @@ export function gameScreen(mode: Mode) {
       });
 
       if (reason !== "over") return;
+      // 送信は演出と並行して始める(docs/08 §7)。
+      const submission =
+        mode === "daily" && !isPractice && settingsStore.get().leaderboard ? submitResult() : null;
       trayView.markDead();
       await gameOverDelay(fxOptions(config));
-      showOverlay(newBest, dailyNo);
+      showOverlay(newBest, dailyNo, submission);
+    }
+
+    type Submission = Result<SubmitJson> | { ok: false; reason: "unknown_moves" };
+
+    /** デイリーの公式記録をランキングへ送る。手の列が分からないゲームは送れない。 */
+    async function submitResult(): Promise<Submission> {
+      if (moves === null || moves.length === 0) return { ok: false, reason: "unknown_moves" };
+      const r = await submitDaily(ctx.installId, startDate, moves, ctx.version);
+      if (r.ok && r.data.preview !== true) saveLeaderboardRecord({ participated: true });
+      return r;
+    }
+
+    /** オーバーレイの順位の行。送信の結果が届いたら書き換える。 */
+    function rankLine(submission: Promise<Submission>): HTMLElement {
+      const line = el("div", { class: "overlay__rank", "data-testid": "daily-rank" }, [
+        t("over.rank.sending"),
+      ]);
+      line.setAttribute("aria-live", "polite");
+      void submission.then((r) => {
+        if (!r.ok) {
+          line.textContent = t(
+            r.reason === "rejected" || r.reason === "unknown_moves"
+              ? "over.rank.rejected"
+              : "over.rank.failed",
+          );
+          line.classList.add("overlay__rank--muted");
+          return;
+        }
+        const daily = r.data.ranks?.daily;
+        const week = r.data.ranks?.week;
+        if (daily === undefined || daily.rank === null) {
+          line.textContent = t("over.rank.failed");
+          line.classList.add("overlay__rank--muted");
+          return;
+        }
+        line.replaceChildren(
+          el("b", {}, [
+            t("over.rank.daily", {
+              rank: formatNumber(daily.rank),
+              count: formatNumber(daily.count),
+            }),
+          ]),
+          week !== undefined && week.rank !== null
+            ? el("span", {}, [t("over.rank.week", { rank: formatNumber(week.rank) })])
+            : "",
+        );
+      });
+      return line;
     }
 
     function statBlock(label: string, value: string): HTMLElement {
       return el("div", {}, [el("span", { class: "stat__label" }, [label]), el("b", {}, [value])]);
     }
 
-    function showOverlay(newBest: boolean, dailyNo: number): void {
+    function showOverlay(
+      newBest: boolean,
+      dailyNo: number,
+      submission: Promise<Submission> | null,
+    ): void {
       keyboard.deselect();
       const actions = el("div", { class: "overlay__actions" });
       const panel = el("div", { class: "overlay__panel" }, [
@@ -463,6 +543,7 @@ export function gameScreen(mode: Mode) {
           statBlock(t("over.streak"), formatNumber(state.longestStreak)),
           statBlock(t("over.rounds"), formatNumber(state.round)),
         ]),
+        submission === null ? null : rankLine(submission),
         actions,
       ]);
 
@@ -473,6 +554,12 @@ export function gameScreen(mode: Mode) {
             variant: "primary",
             testId: "share",
             onClick: () => void onShare(dailyNo),
+          }),
+          button({
+            label: t("over.rank.view"),
+            variant: "secondary",
+            testId: "over-ranking",
+            onClick: () => navigate("/ranking"),
           }),
           button({
             label: t("over.practice"),
@@ -544,6 +631,7 @@ export function gameScreen(mode: Mode) {
       activeMs = 0;
       lastTick = Date.now();
       isPractice = practice;
+      moves = mode === "daily" ? [] : null;
       const now = Date.now();
       state =
         mode === "daily"
