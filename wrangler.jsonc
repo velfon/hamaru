@@ -13,6 +13,15 @@
     "run_worker_first": ["/api/*"],
   },
   "analytics_engine_datasets": [{ "binding": "EVENTS", "dataset": "hamaru_events" }],
-  "vars": { "APP_VERSION": "dev", "TELEMETRY": "on" },
+  // ランキング(docs/08 §4)。スキーマは migrations/、適用は `wrangler d1 migrations apply hamaru --remote`
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "hamaru",
+      "database_id": "41cd9528-8d04-45da-99dd-adf8aa5755ec",
+      "migrations_dir": "migrations",
+    },
+  ],
+  "vars": { "APP_VERSION": "dev", "TELEMETRY": "on", "LEADERBOARD": "on" },
   "observability": { "enabled": true },
 }

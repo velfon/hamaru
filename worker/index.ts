@@ -10,6 +10,7 @@
  * 素通し先として `env.ASSETS.fetch` を残しておく(ローカル開発と将来の経路変更のため)。
  */
 import { handleEvents } from "./events";
+import { routeLeaderboard } from "./leaderboard";
 
 /** `request.cf.country` を粗い地域として使う。IP は保存しない(docs/02 §10)。 */
 function country(request: Request): string {
@@ -25,6 +26,9 @@ export default {
     if (url.pathname === "/api/events") {
       return handleEvents(request, env, country(request));
     }
+
+    const leaderboard = await routeLeaderboard(request, env);
+    if (leaderboard !== null) return leaderboard;
 
     if (url.pathname === "/api/health") {
       return Response.json(
