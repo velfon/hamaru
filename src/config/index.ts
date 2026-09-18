@@ -8,12 +8,19 @@
  * Node 側(sim / scripts)は `src/config/load.ts`(zod で検証して読む)を使う。
  */
 import type { ResolvedConfig } from "../core/types";
+import type { LevelsTable } from "../core/levels";
 import experimentsJson from "./experiments.json";
 import gameConfigJson from "./game-config.json";
+import levelsTableJson from "./levels-table.json";
 import type { ExperimentsFile } from "./schema";
 
 export const DEFAULT_CONFIG = gameConfigJson as unknown as ResolvedConfig;
 export const DEFAULT_EXPERIMENTS = experimentsJson as unknown as ExperimentsFile;
+/**
+ * レベルの面の表(docs/09 §4)。レベルは実験を適用しない既定の config で遊ぶ
+ * (実験でピースが変わると表の「解ける面」の前提が崩れるため)。
+ */
+export const LEVELS_TABLE = levelsTableJson as unknown as LevelsTable;
 
 export * from "./resolve";
 export type * from "./schema";

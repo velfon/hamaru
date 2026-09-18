@@ -84,7 +84,12 @@ export function createBoardView(size: number): BoardView {
     return t("a11y.cell", {
       row: y + 1,
       col: x + 1,
-      state: value === 0 ? t("a11y.cell.empty") : t("a11y.cell.filled"),
+      state:
+        value === 0
+          ? t("a11y.cell.empty")
+          : value === 7
+            ? t("a11y.cell.obstacle")
+            : t("a11y.cell.filled"),
     });
   }
 

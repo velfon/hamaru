@@ -25,7 +25,7 @@ const common = {
   platform: z.enum(["ios", "android", "desktop", "other"]),
   exp: z.string().max(SHORT),
   variant: z.string().max(SHORT),
-  mode: z.enum(["endless", "daily", ""]),
+  mode: z.enum(["endless", "daily", "level", ""]),
 };
 
 const bit = z.union([z.literal(0), z.literal(1)]);
@@ -46,7 +46,7 @@ export const eventSchema = z.discriminatedUnion("event", [
   z.strictObject({
     ...common,
     event: z.literal("game_end"),
-    reason: z.enum(["over", "abandon"]),
+    reason: z.enum(["over", "abandon", "clear"]),
     score: count,
     lines: count,
     moves: count,

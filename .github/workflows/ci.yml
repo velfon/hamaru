@@ -80,6 +80,8 @@ jobs:
       - run: npm ci
       # G4: 既定 config で帯域検査
       - run: npm run sim -- --games 2000 --bots random,greedy,lookahead --seed 1 --check
+      # レベル: 面の表が今の config のものか、序盤は greedy・以降は lookahead で解けるか、難易度が単調か(docs/09 §4)
+      - run: npm run sim:levels -- --to 200 --check
       # 稼働中の実験があれば各バリアントも走らせる(明らかな破壊だけを落とす。docs/06 §9 N-10)
       - name: sim (running experiment variants)
         run: |

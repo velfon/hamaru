@@ -706,3 +706,89 @@ dialog.dialog::backdrop {
   flex: 0 0 auto;
   width: auto;
 }
+
+/* ------------------------------------------------------------------ */
+/* レベル(docs/09 §5)。星は金継ぎ色、次に遊ぶ面は金の縁                   */
+/* ------------------------------------------------------------------ */
+
+.stars {
+  display: inline-flex;
+  gap: 2px;
+  letter-spacing: 0;
+}
+
+.star {
+  color: color-mix(in oklab, var(--ink-muted), transparent 55%);
+}
+
+.star--on {
+  color: var(--kintsugi);
+}
+
+.overlay .stars {
+  font-size: 36px;
+  justify-content: center;
+  margin: 4px 0 8px;
+}
+
+.levels__summary {
+  font-family: var(--font-display);
+  font-weight: 700;
+  margin: 0 2px 14px;
+}
+
+.levels {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 8px;
+}
+
+.levels__tile {
+  appearance: none;
+  width: 100%;
+  aspect-ratio: 1;
+  border: 0;
+  border-radius: 14px;
+  background: var(--tray);
+  color: var(--ink);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  cursor: pointer;
+  font: inherit;
+}
+
+.levels__tile:focus-visible {
+  outline: 3px solid var(--kintsugi);
+  outline-offset: 2px;
+}
+
+.levels__tile--next {
+  box-shadow: inset 0 0 0 2px var(--kintsugi);
+}
+
+.levels__tile--locked {
+  cursor: default;
+  opacity: 0.45;
+}
+
+.levels__no {
+  font-family: var(--font-display);
+  font-weight: 900;
+  font-size: 20px;
+  font-variant-numeric: tabular-nums;
+}
+
+.levels__tile .stars {
+  font-size: 11px;
+}
+
+.levels__meta {
+  color: var(--ink-muted);
+  font-size: 11px;
+}

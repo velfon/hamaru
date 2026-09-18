@@ -15,7 +15,16 @@ import { rngFromState, createRng } from "./rng";
 import { getShape } from "./shapes";
 import { scorePlacement } from "./scoring";
 import { TRAY_SIZE, generateTray } from "./tray";
-import type { Board, GameState, Mode, Piece, PlaceResult, ResolvedConfig, Status } from "./types";
+import type {
+  Board,
+  GameState,
+  LevelInfo,
+  Mode,
+  Piece,
+  PlaceResult,
+  ResolvedConfig,
+  Status,
+} from "./types";
 
 function failedResult(): PlaceResult {
   return {
@@ -92,7 +101,15 @@ export function place(
   let tray: Array<Piece | null> = state.tray.map((p, i) => (i === trayIndex ? null : p));
   let rngState = state.rng;
   let round = state.round;
-  const newTray = tray.every((p) => p === null);
+  const level = state.level;
+  const linesTotal = state.linesCleared + lines;
+  // レベル: 目標に達したらクリア(最後のトレイの最後の 1 手でも間に合えばクリア)。docs/09 §1
+  const levelCleared = level !== undefined && linesTotal >= level.goal;
+  const trayEmpty = tray.every((p) => p === null);
+  // レベル: トレイを使い切ったら次を配らずに失敗。
+  const outOfTrays =
+    level !== undefined && !levelCleared && trayEmpty && state.round >= level.trayLimit;
+  const newTray = trayEmpty && !levelCleared && !outOfTrays;
   if (newTray) {
     const rng = rngFromState(state.rng);
     tray = generateTray(rng, cleared.board, config);
@@ -100,8 +117,8 @@ export function place(
     round += 1;
   }
 
-  const gameOver = !anyFits(cleared.board, size, tray);
-  const status: Status = gameOver ? "over" : "playing";
+  const gameOver = !levelCleared && (outOfTrays || !anyFits(cleared.board, size, tray));
+  const status: Status = levelCleared ? "cleared" : gameOver ? "over" : "playing";
 
   const next: GameState = {
     ...state,
@@ -113,7 +130,7 @@ export function place(
     longestStreak: Math.max(state.longestStreak, streakAfter),
     round,
     moves: state.moves + 1,
-    linesCleared: state.linesCleared + lines,
+    linesCleared: linesTotal,
     status,
   };
 
@@ -130,6 +147,7 @@ export function place(
       boardCleared,
       newTray,
       gameOver,
+      ...(level !== undefined ? { levelCleared, outOfTrays } : {}),
     },
   };
 }
@@ -203,6 +221,7 @@ interface SerializedState {
   linesCleared: number;
   status: string;
   startedAt: number;
+  level?: LevelInfo;
 }
 
 export function serialize(state: GameState): string {
@@ -222,6 +241,7 @@ export function serialize(state: GameState): string {
     linesCleared: state.linesCleared,
     status: state.status,
     startedAt: state.startedAt,
+    ...(state.level !== undefined ? { level: state.level } : {}),
   };
   return JSON.stringify(payload);
 }
@@ -242,8 +262,20 @@ export function deserialize(s: string): GameState | null {
   const o = raw as Record<string, unknown>;
 
   if (o["version"] !== 1) return null;
-  if (o["mode"] !== "endless" && o["mode"] !== "daily") return null;
-  if (o["status"] !== "playing" && o["status"] !== "over") return null;
+  const mode = o["mode"];
+  if (mode !== "endless" && mode !== "daily" && mode !== "level") return null;
+  const status = o["status"];
+  if (status !== "playing" && status !== "over" && status !== "cleared") return null;
+  let level: LevelInfo | undefined;
+  if (mode === "level") {
+    const l = o["level"] as Record<string, unknown> | undefined;
+    if (typeof l !== "object" || l === null) return null;
+    const { no, goal, trayLimit } = l;
+    if (![no, goal, trayLimit].every((v) => Number.isInteger(v) && (v as number) >= 1)) return null;
+    level = { no: no as number, goal: goal as number, trayLimit: trayLimit as number };
+  } else if (status === "cleared") {
+    return null;
+  }
   if (typeof o["seed"] !== "string") return null;
   if (typeof o["board"] !== "string") return null;
 
@@ -267,7 +299,7 @@ export function deserialize(s: string): GameState | null {
   const board = decodeBoard(o["board"]);
   if (board === null || board.length !== size * size) return null;
   for (let i = 0; i < board.length; i++) {
-    if ((board[i] as number) > 6) return null;
+    if ((board[i] as number) > 7) return null;
   }
 
   const trayRaw = o["tray"];
@@ -284,7 +316,7 @@ export function deserialize(s: string): GameState | null {
 
   return {
     version: 1,
-    mode: o["mode"],
+    mode,
     seed: o["seed"],
     rng: o["rng"] as number,
     size,
@@ -296,7 +328,8 @@ export function deserialize(s: string): GameState | null {
     round: o["round"] as number,
     moves: o["moves"] as number,
     linesCleared: o["linesCleared"] as number,
-    status: o["status"],
+    status,
     startedAt: o["startedAt"] as number,
+    ...(level !== undefined ? { level } : {}),
   };
 }

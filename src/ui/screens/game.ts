@@ -101,7 +101,7 @@ interface StartInfo {
  * 開発ビルドのみ: `?state=` で状態を差し込む(docs/06 §5)。
  * **1 回だけ**効くように、読んだらすぐ URL から消す(以降は通常どおり保存状態で動く)。
  */
-function seededState(): GameState | null {
+export function seededState(): GameState | null {
   if (!import.meta.env.DEV) return null;
   const params = new URLSearchParams(location.search);
   const raw = params.get("state");

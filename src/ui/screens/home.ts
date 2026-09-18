@@ -14,7 +14,14 @@
 import { deserialize } from "../../core/game";
 import { msUntilNextUtcDay, utcDateString } from "../../core/daily";
 import { formatCountdown, formatDate, formatNumber, t } from "../../i18n";
-import { KEYS, loadDailyResults, loadSavedGame } from "../../storage/local";
+import {
+  KEYS,
+  loadDailyResults,
+  loadLevelProgress,
+  loadSavedGame,
+  totalStars,
+  unlockedLevel,
+} from "../../storage/local";
 import { button, iconButton, ICON_SETTINGS } from "../components/button";
 import { el, fillSlot } from "../dom";
 import { navigate, type Screen } from "../router";
@@ -113,6 +120,19 @@ export function homeScreen(container: HTMLElement): Screen {
         })
       : null,
   ]);
+
+  /* レベル(docs/09 §5) */
+  const levelProgress = loadLevelProgress();
+  const levelsButton = button({
+    label: t("home.levels", {
+      n: unlockedLevel(levelProgress),
+      stars: totalStars(levelProgress),
+    }),
+    variant: "secondary",
+    testId: "levels-link",
+    onClick: () => navigate("/levels"),
+  });
+  actions.appendChild(levelsButton);
 
   /* 統計(空状態は誘導。docs/03 §7) */
   const statsRow =

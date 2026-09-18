@@ -6,8 +6,11 @@
  * (依存方向 core ← config を保つため。docs/02 §11 N-1)。
  */
 
-/** 盤のセル。0 = 空、1..6 = 色インデックス。 */
-export type Cell = 0 | 1 | 2 | 3 | 4 | 5 | 6;
+/** 盤のセル。0 = 空、1..6 = 色インデックス、7 = 素焼きの欠片(レベルの障害物。docs/09 §1)。 */
+export type Cell = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7;
+
+/** 素焼きの欠片のセル値。 */
+export const OBSTACLE: Cell = 7;
 
 /** ピースの色。0(空)を含まない。 */
 export type Color = 1 | 2 | 3 | 4 | 5 | 6;
@@ -33,8 +36,18 @@ export interface Piece {
   readonly shapeId: string;
 }
 
-export type Mode = "endless" | "daily";
-export type Status = "playing" | "over";
+export type Mode = "endless" | "daily" | "level";
+/** `cleared` はレベルモードだけ(目標の列数に達した)。 */
+export type Status = "playing" | "over" | "cleared";
+
+/** レベルモードの面の情報(docs/09 §3)。 */
+export interface LevelInfo {
+  readonly no: number;
+  /** 目標の列数。 */
+  readonly goal: number;
+  /** 使えるトレイの数(= ラウンドの上限)。 */
+  readonly trayLimit: number;
+}
 
 export interface GameState {
   readonly version: 1;
@@ -55,6 +68,8 @@ export interface GameState {
   readonly status: Status;
   /** epoch ms(演出・統計用。ロジックには使わない)。 */
   readonly startedAt: number;
+  /** レベルモードだけ。エンドレス・デイリーでは持たない(保存形式を変えない)。 */
+  readonly level?: LevelInfo;
 }
 
 export interface PlaceResult {
@@ -68,6 +83,10 @@ export interface PlaceResult {
   boardCleared: boolean;
   newTray: boolean;
   gameOver: boolean;
+  /** レベルモード: この手で目標に達した。 */
+  levelCleared?: boolean;
+  /** レベルモード: トレイを使い切って失敗した。 */
+  outOfTrays?: boolean;
 }
 
 /* ------------------------------------------------------------------ */
@@ -120,6 +139,20 @@ export interface FxConfig {
   readonly snapDurationMs: number;
 }
 
+/** レベルの難易度(docs/09 §2)。 */
+export interface LevelsConfig {
+  readonly goalBase: number;
+  readonly goalPerLevel: number;
+  readonly goalMax: number;
+  readonly traysPerLineStart: number;
+  readonly traysPerLineEnd: number;
+  readonly traysPerLineStep: number;
+  readonly obstaclesPerLevel: number;
+  readonly obstaclesMax: number;
+  readonly starThree: number;
+  readonly starTwo: number;
+}
+
 export interface ResolvedConfig {
   readonly schemaVersion: number;
   readonly board: { readonly size: number };
@@ -128,4 +161,5 @@ export interface ResolvedConfig {
   readonly input: InputConfig;
   readonly daily: DailyConfig;
   readonly fx: FxConfig;
+  readonly levels: LevelsConfig;
 }
