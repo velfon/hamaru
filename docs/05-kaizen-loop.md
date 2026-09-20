@@ -369,3 +369,21 @@ GitHub Actions はシェル省略時に `bash -e` で実行し、`pipefail` が�
 - `--max-turns` を 140 に、`Bash(cat:*)` `Bash(sed:*)` `Bash(ls:*)` を許可(まとめ読み用)
 - `show_full_output: true` で、途中で止まったときに何をしていたか追えるようにした
 - 失敗した日は Issue `kaizen: agent run failed <日付>` を作る(気づけるように)
+
+### N-11. 動かす意味がある日だけ動かす(§4.1、2026-09-20)
+公開直後は利用者が少なく(直近 7 日で session 15・game 3・エラー 0)、実験は成立せず(§6.2 の 1 群 300 install に
+遠く届かない)、直す不具合も無い。それでも毎日エージェントを起動すると、**測れない変更**を積み上げながら
+1 日 6〜7 ドルを使う。そこで metrics の後に決定論的なゲート(`scripts/kaizen-should-run.ts`)を置き、
+次のいずれかに当てはまる日だけ Claude を起動する(`shouldRun` の判定順):
+
+1. 実験の結論が要る — `experiment:eval` の判定が `promote` / `rollback` / `inconclusive`
+2. 新規または増加中のエラーがある — `topErrors` に `isNew` か `rising`
+3. crash-free が 99.5 % 未満(session が 20 以上の日だけ。少数の日は率が暴れる)
+4. LCP p75 > 1500 ms か INP p75 > 100 ms(docs/02 §9 の予算)
+5. 直近 7 日の session が **しきい値以上**(既定 200。`vars.KAIZEN_MIN_SESSIONS` で変えられる)
+
+どれにも当たらない日は Claude を起動せず(playwright の導入も飛ばす)、理由を `::notice::` に出して正常終了する。
+metrics の取得・実験の判定・kaizen/metrics の保存は**毎日続ける**ので、数字の連続性は切れない。
+しきい値 200 は「1 群 100 install・7 日で 2 群」を粗く見た数で、実験を始められる規模の目安。
+ゲートは `workflow_dispatch` でも効くので、人手で動かしたい日は変数 `KAIZEN_MIN_SESSIONS` を一時的に 0 にしてから
+dispatch する(`gh variable set KAIZEN_MIN_SESSIONS -R velfon/hamaru --body 0`)。
