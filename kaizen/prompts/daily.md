@@ -4,7 +4,15 @@
 ワークフローがすでに `kaizen/metrics/<DATE>.json` と `kaizen/metrics/<DATE>-decision.json` を作っている
 (実験中は `<DATE>-installs.json` も)。**PR をマージしない。main に push しない。**
 
-## 0. 状況把握(読むだけ)
+## 0. 今日の予算(最初に読む)
+
+**ツール呼び出しは 40 回程度で PR まで到達すること**(上限は 140 回。超えると打ち切られ、作業は失われる)。
+- 読むときは `cat` で**複数のファイルをまとめて**開く(例: `cat kaizen/BACKLOG.md kaizen/CHANGELOG.md`)
+- 検証は**1 コマンドにつなげる**(§3)
+- 30 回を超えたら、そこまでの変更をコミットして PR を出す。中途半端なら変更を捨てて `kaizen/` の記録だけの PR にする
+- 迷ったら小さい方。1 日で終わる大きさに切る(POLICY)
+
+## 1. 状況把握(読むだけ)
 1. `kaizen/metrics/<DATE>.json` を読む。形式は `docs/04-telemetry-and-metrics.md` §7 と §10 N-5。
    - `overall.d1` / `overall.d7` / `overall.d14`、`byDay`、`byPlatform`、`byLang`(d7)、`experiment`、`topErrors`、`vitals`
    - `sampling.maxSampleInterval > 1` ならサンプリングが起きている(数値は重み付き推定)
@@ -14,7 +22,7 @@
 4. 指標の変化を 5 行以内で自分の言葉にまとめる(PR 本文に使う)。前日比・7 日比で目立つ動き、`topErrors` の `isNew` / `rising`。
    データが少ない(`overall.d7.sessions` が 100 未満など)ときは「判断材料が少ない」と明記する。
 
-## 1. 今日の行動を 1 つ決める
+## 2. 今日の行動を 1 つ決める
 POLICY の優先順位:
 1. `decision` が `promote` / `rollback` / `inconclusive` → **実験の結論処理**
 2. `topErrors` に `isNew` または `rising` がある → **バグ修正**
@@ -23,7 +31,7 @@ POLICY の優先順位:
 
 決めた理由を 2 文で書く(PR 本文に使う)。同じ種類を 3 日連続で選ばない(CHANGELOG を見る)。
 
-## 2. 実装
+## 3. 実装
 - ブランチ: `git switch -c kaizen/<DATE>-<短い英語の slug>`
 - **実験の結論処理**:
   - `promote`: 実験の treatment のオーバーライドを `src/config/game-config.json` に取り込む
@@ -42,18 +50,20 @@ POLICY の優先順位:
 - `kaizen/metrics/<DATE>.json` と `kaizen/metrics/<DATE>-decision.json` をコミットに含める(日記として残す)。
   `<DATE>-installs.json` は install 単位のデータなので**コミットしない**(.gitignore 済み。公開リポジトリのため)
 
-## 3. 検証(全部通るまで直す。3 回で通らなければ変更を捨てる)
+## 4. 検証(全部通るまで直す。3 回で通らなければ変更を捨てる)
+
+**まずこの 1 コマンド**(常に必要):
 ```
-npm run check
-npm test
-npm run sim -- --games 500 --bots random,greedy,lookahead --seed 1 --check
+npm run check && npm test
 ```
-- 実験を起票・変更したら `npm run sim -- --games 500 --bots random,greedy,lookahead --seed 1 --variant treatment --check` も
-  (帯域外は失敗にならない。帯域外なら PR 本文に理由を書く)
-- UI・文言・スタイルを触ったら `npm run test:e2e`
+触ったところに応じて**追加で 1 コマンド**だけ:
+- `src/config/` か `src/core/` を触った → `npm run sim -- --games 500 --bots random,greedy,lookahead --seed 1 --check`
+  (実験を起票したら `--variant treatment` でも一度。帯域外は失敗ではない。理由を PR 本文に書く)
+- `src/ui/` `src/styles/` `src/i18n/` を触った → `npm run test:e2e`
+- レベルの難易度(`levels`)を触った → `npm run levels:table && npm run sim:levels -- --to 200 --check`
 - 3 回直しても通らない → `git restore .` と `git clean -fd -- src tests docs sim` で変更を捨て、`kaizen/` の記録(何を試して何が失敗したか)だけを PR にする
 
-## 4. PR
+## 5. PR
 ```
 git add -A
 git commit -m "kaizen(<種類>): <要約>"

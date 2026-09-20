@@ -357,3 +357,15 @@ revert PR は GITHUB_TOKEN 名義なので CI が自動では走らない(`needs
 GitHub Actions はシェル省略時に `bash -e` で実行し、`pipefail` が付かない。`npm run metrics:pull | tee log` の失敗を見逃して
 指標なしで Claude が起動しかねないので、全ワークフローで `defaults.run.shell: bash`(= `bash -eo pipefail`)にした。
 また Deploy の同時実行制限はワークフロー全体ではなく deploy ジョブに付け、canary の 30 分待ちが次のデプロイを止めないようにした。
+
+### N-10. 1 日の作業はターン上限に収める(§4.5、2026-09-20)
+初回の本番実行(9/20)は、エージェントが**80 ターンの上限に達して打ち切られ**、作業も PR も残らなかった
+(10 分、6.68 ドル相当)。9/18・9/19 の失敗はこれとは別で、0.9 秒・費用 0・モデル使用実績なし = 利用枠による拒否。
+モデルと認証そのものは `Agent check` ワークフロー(手動)で正常を確認した。
+
+対処:
+- `daily.md` の先頭に**予算**を書いた(40 回程度で PR、30 回を超えたらその時点でまとめる)。読むのは `cat` でまとめ、
+  検証は `npm run check && npm test` の 1 コマンド + 触った範囲に応じた 1 コマンドだけ
+- `--max-turns` を 140 に、`Bash(cat:*)` `Bash(sed:*)` `Bash(ls:*)` を許可(まとめ読み用)
+- `show_full_output: true` で、途中で止まったときに何をしていたか追えるようにした
+- 失敗した日は Issue `kaizen: agent run failed <日付>` を作る(気づけるように)
