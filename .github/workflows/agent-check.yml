@@ -1,0 +1,37 @@
+# 改善エージェントの認証・モデルの切り分け(手動実行)。
+# Kaizen daily の Claude ステップが 1 ターンで失敗したときに、原因が「認証」か「モデル」かを見分ける。
+name: Agent check
+
+on:
+  workflow_dispatch:
+    inputs:
+      model:
+        description: "--model に渡す値(例: claude-opus-5, opus, sonnet)。空ならモデルを指定しない"
+        required: false
+        default: "claude-opus-5"
+
+permissions:
+  contents: read
+  id-token: write
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          prompt: |
+            Reply with exactly: AGENT CHECK OK
+            Do not use any tools.
+          claude_args: |
+            ${{ inputs.model && format('--model {0}', inputs.model) || '' }}
+            --max-turns 2
+            --allowedTools ""
