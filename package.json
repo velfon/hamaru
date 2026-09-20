@@ -38,7 +38,8 @@
     "canary": "tsx scripts/canary.ts",
     "change-class": "tsx scripts/change-class.ts",
     "sim:levels": "tsx sim/levels.ts",
-    "levels:table": "tsx scripts/levels-table.ts"
+    "levels:table": "tsx scripts/levels-table.ts",
+    "kaizen:should-run": "tsx scripts/kaizen-should-run.ts"
   },
   "dependencies": {
     "web-vitals": "6.2.2",

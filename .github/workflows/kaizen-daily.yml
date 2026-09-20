@@ -76,6 +76,15 @@ jobs:
         if: steps.open.outputs.count == '0'
         run: npm run experiment:eval -- --metrics kaizen/metrics
 
+      # 動かす意味がある日だけ Claude を起動する(docs/05 §13 N-11)。
+      # 実験の結論・新規や増加中のエラー・性能の悪化・十分なデータ、のいずれか。
+      - name: should the agent run today?
+        id: gate
+        if: steps.open.outputs.count == '0'
+        run: |
+          npm run kaizen:should-run -- --metrics kaizen/metrics --date "${{ steps.metrics.outputs.date }}" \
+            --min-sessions "${{ vars.KAIZEN_MIN_SESSIONS || '200' }}"
+
       - if: steps.open.outputs.count == '0'
         uses: actions/upload-artifact@v7
         with:
@@ -86,10 +95,14 @@ jobs:
             !kaizen/metrics/*-installs.json
           retention-days: 30
 
-      - if: steps.open.outputs.count == '0'
+      - name: skipped notice
+        if: steps.gate.outputs.run == 'false'
+        run: echo "::notice::今日は改善エージェントを動かしません — ${{ steps.gate.outputs.reason }}"
+
+      - if: steps.gate.outputs.run == 'true'
         run: npx playwright install --with-deps chromium
 
-      - if: steps.open.outputs.count == '0'
+      - if: steps.gate.outputs.run == 'true'
         uses: anthropics/claude-code-action@v1
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -111,7 +124,7 @@ jobs:
 
       # 失敗した日は気づけるようにする(ターン上限・利用枠・実装の失敗など)
       - name: report failure
-        if: failure() && steps.open.outputs.count == '0'
+        if: failure() && steps.gate.outputs.run == 'true'
         run: |
           title="kaizen: agent run failed $(date -u +%F)"
           url="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
