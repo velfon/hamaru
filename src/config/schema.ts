@@ -72,6 +72,25 @@ const fxSchema = z.strictObject({
   snapDurationMs: z.number().min(0).max(2000),
 });
 
+/** レベルの難易度(docs/09 §2)。 */
+const levelsSchema = z
+  .strictObject({
+    goalBase: z.number().int().min(1).max(20),
+    goalPerLevel: z.number().min(0).max(5),
+    goalMax: z.number().int().min(1).max(200),
+    traysPerLineStart: z.number().min(0.3).max(5),
+    traysPerLineEnd: z.number().min(0.3).max(5),
+    traysPerLineStep: z.number().min(0).max(1),
+    obstaclesPerLevel: z.number().min(0).max(5),
+    obstaclesMax: z.number().int().min(0).max(60),
+    starThree: z.number().min(0.1).max(1),
+    starTwo: z.number().min(0.1).max(1),
+  })
+  .refine((l) => l.traysPerLineEnd <= l.traysPerLineStart, {
+    message: "traysPerLineEnd は traysPerLineStart 以下にしてください(レベルが上がるほど厳しく)",
+  })
+  .refine((l) => l.starThree <= l.starTwo, { message: "starThree は starTwo 以下にしてください" });
+
 export const gameConfigSchema = z.strictObject({
   schemaVersion: z.literal(1),
   board: z.strictObject({ size: sizeSchema }),
@@ -80,6 +99,7 @@ export const gameConfigSchema = z.strictObject({
   input: inputSchema,
   daily: dailySchema,
   fx: fxSchema,
+  levels: levelsSchema,
 });
 
 export type GameConfig = z.infer<typeof gameConfigSchema>;
@@ -111,6 +131,21 @@ export const configOverrideSchema = z.strictObject({
   input: inputSchema.partial().optional(),
   daily: dailySchema.partial().optional(),
   fx: fxSchema.partial().optional(),
+  levels: z
+    .strictObject({
+      goalBase: z.number().int().min(1).max(20),
+      goalPerLevel: z.number().min(0).max(5),
+      goalMax: z.number().int().min(1).max(200),
+      traysPerLineStart: z.number().min(0.3).max(5),
+      traysPerLineEnd: z.number().min(0.3).max(5),
+      traysPerLineStep: z.number().min(0).max(1),
+      obstaclesPerLevel: z.number().min(0).max(5),
+      obstaclesMax: z.number().int().min(0).max(60),
+      starThree: z.number().min(0.1).max(1),
+      starTwo: z.number().min(0.1).max(1),
+    })
+    .partial()
+    .optional(),
 });
 
 export type ConfigOverride = z.infer<typeof configOverrideSchema>;

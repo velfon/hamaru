@@ -36,7 +36,9 @@
     "cf:dev": "npm run build && wrangler dev --port 8787",
     "kaizen:digest": "tsx scripts/kaizen-digest.ts",
     "canary": "tsx scripts/canary.ts",
-    "change-class": "tsx scripts/change-class.ts"
+    "change-class": "tsx scripts/change-class.ts",
+    "sim:levels": "tsx sim/levels.ts",
+    "levels:table": "tsx scripts/levels-table.ts"
   },
   "dependencies": {
     "web-vitals": "6.2.2",

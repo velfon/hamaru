@@ -41,5 +41,17 @@
   },
   "input": { "touchLiftOffset": 70, "previewClears": true },
   "daily": { "epoch": "2026-10-01", "shareGaugeMax": 6000 },
-  "fx": { "clearDurationMs": 320, "snapDurationMs": 120 }
+  "fx": { "clearDurationMs": 320, "snapDurationMs": 120 },
+  "levels": {
+    "goalBase": 3,
+    "goalPerLevel": 0.25,
+    "goalMax": 15,
+    "traysPerLineStart": 2.0,
+    "traysPerLineEnd": 1.1,
+    "traysPerLineStep": 0.02,
+    "obstaclesPerLevel": 0.3,
+    "obstaclesMax": 18,
+    "starThree": 0.6,
+    "starTwo": 0.8
+  }
 }

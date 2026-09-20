@@ -22,6 +22,10 @@ export const KEYS = {
   experiments: "experiments",
   /** ランキングへの参加記録(docs/08 §3)。サーバのデータを消すべきかの判断に使う。 */
   leaderboard: "leaderboard",
+  /** レベルの進捗(docs/09 §3)。 */
+  levels: "levels",
+  /** 途中のレベルのゲーム。 */
+  gameLevel: "game:level",
 } as const;
 
 export type StorageKey = (typeof KEYS)[keyof typeof KEYS];
@@ -374,7 +378,7 @@ function pickMoves(v: unknown): Array<[number, number, number]> | undefined {
 }
 
 export function loadSavedGame(
-  key: typeof KEYS.gameEndless | typeof KEYS.gameDaily,
+  key: typeof KEYS.gameEndless | typeof KEYS.gameDaily | typeof KEYS.gameLevel,
 ): SavedGame | null {
   return readKey<SavedGame>(key, (data) => {
     if (!isRecord(data)) return null;
@@ -409,8 +413,59 @@ export function saveLeaderboardRecord(r: LeaderboardRecord): void {
 }
 
 export function saveSavedGame(
-  key: typeof KEYS.gameEndless | typeof KEYS.gameDaily,
+  key: typeof KEYS.gameEndless | typeof KEYS.gameDaily | typeof KEYS.gameLevel,
   value: SavedGame,
 ): void {
   writeKey(key, value);
+}
+
+/* ------------------------------------------------------------------ */
+/* レベルの進捗(docs/09 §3)                                           */
+/* ------------------------------------------------------------------ */
+
+export interface LevelResult {
+  stars: 1 | 2 | 3;
+  score: number;
+}
+
+/** レベル番号 → 最高の星と得点(クリアしたレベルだけ)。 */
+export type LevelProgress = Record<number, LevelResult>;
+
+export function loadLevelProgress(): LevelProgress {
+  const v = readKey<LevelProgress>(KEYS.levels, (data) => {
+    if (!isRecord(data) || !isRecord(data["progress"])) return null;
+    const out: LevelProgress = {};
+    for (const [k, r] of Object.entries(data["progress"])) {
+      const n = Number(k);
+      if (!Number.isInteger(n) || n < 1 || !isRecord(r)) continue;
+      const stars = r["stars"];
+      if (stars !== 1 && stars !== 2 && stars !== 3) continue;
+      out[n] = { stars, score: pickNumber(r["score"], 0) };
+    }
+    return out;
+  });
+  return v ?? {};
+}
+
+/** クリアを記録する。星と得点はそれぞれ最高を残す。 */
+export function saveLevelResult(no: number, result: LevelResult): LevelProgress {
+  const progress = loadLevelProgress();
+  const prev = progress[no];
+  progress[no] = {
+    stars: Math.max(prev?.stars ?? 0, result.stars) as 1 | 2 | 3,
+    score: Math.max(prev?.score ?? 0, result.score),
+  };
+  writeKey(KEYS.levels, { progress });
+  return progress;
+}
+
+/** 遊べる最大のレベル(クリアした最大 + 1)。 */
+export function unlockedLevel(progress: LevelProgress): number {
+  let n = 1;
+  while (progress[n] !== undefined) n++;
+  return n;
+}
+
+export function totalStars(progress: LevelProgress): number {
+  return Object.values(progress).reduce((s, r) => s + r.stars, 0);
 }

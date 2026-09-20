@@ -264,3 +264,7 @@ Metrics check ワークフローで本物の SQL API に投げて確認した。
   `FORMAT JSONEachRow` は通った(セッション行・初回日・所要時間・スコアの 4 クエリが成功)。
 - **`if()` の 2 つの分岐は同じ型でなければならない**。`if(c, 0.005, if(c2, 8, 50))` は
   「Double and Integer」で 422 になった。数値リテラルは `float()` で `8.0` の形にそろえる(回帰テストあり)。
+
+### N-9. レベルモードの追記(2026-09-18、docs/09 §6)
+`mode` に `"level"`、`game_end.reason` に `"clear"` を足した(列の位置は変えない)。
+`median_game_seconds` は `reason = over` だけを数えるので、クリアで終わる短いゲームは混ざらない。

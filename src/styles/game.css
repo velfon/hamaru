@@ -563,3 +563,14 @@
   color: var(--ink-muted);
   font-size: var(--fs-small);
 }
+
+/* 素焼きの欠片(レベルの障害物。docs/09 §1)。釉薬を掛けていない素地: 艶なし・細い斜線 */
+.board .cell[data-c="7"] {
+  --glaze: color-mix(in oklab, var(--ink-muted), var(--cell-edge) 55%);
+  background: repeating-linear-gradient(
+    135deg,
+    var(--glaze) 0 3px,
+    color-mix(in oklab, var(--glaze), black 12%) 3px 6px
+  );
+  box-shadow: 0 2px 0 var(--cell-edge);
+}

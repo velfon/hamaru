@@ -7,6 +7,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { allResolutions } from "../src/config/resolve";
+import { levelsConfigHash, type LevelsTable } from "../src/core/levels";
 import { safeParseExperiments, safeParseGameConfig } from "../src/config/schema";
 
 function readJson(path: string): unknown {
@@ -45,6 +46,23 @@ function main(argv: readonly string[]): number {
         const r = safeParseGameConfig(config);
         if (!r.ok) problems.push(`解決結果 ${label}:\n${r.error}`);
       }
+    }
+  }
+
+  // レベルの面の表が今の config で作られたものか(docs/09 §4)。
+  const tablePath = resolve(argv[2] ?? "src/config/levels-table.json");
+  if (problems.length === 0) {
+    const base = safeParseGameConfig(readJson(configPath));
+    try {
+      const table = readJson(tablePath) as LevelsTable;
+      if (base.ok && table.configHash !== levelsConfigHash(base.config)) {
+        problems.push(
+          `levels-table (${tablePath}): config が変わったので面の表が古くなっています。\n` +
+            "  npm run levels:table で作り直してください(docs/09 §4)",
+        );
+      }
+    } catch (e) {
+      problems.push(`levels-table: 読み込みに失敗しました (${tablePath}): ${String(e)}`);
     }
   }
 

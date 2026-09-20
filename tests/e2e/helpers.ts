@@ -8,7 +8,7 @@
 import { test as base, type BrowserContext, type Page } from "@playwright/test";
 import { batchSchema } from "../../worker/schema";
 import { serialize } from "../../src/core/game";
-import type { GameState, Mode, Piece } from "../../src/core/types";
+import type { GameState, LevelInfo, Mode, Piece } from "../../src/core/types";
 
 export interface StateOptions {
   mode?: Mode;
@@ -21,6 +21,7 @@ export interface StateOptions {
   round?: number;
   moves?: number;
   linesCleared?: number;
+  level?: LevelInfo;
 }
 
 export function makeState(options: StateOptions = {}): GameState {
@@ -28,7 +29,12 @@ export function makeState(options: StateOptions = {}): GameState {
   return {
     version: 1,
     mode: options.mode ?? "endless",
-    seed: options.mode === "daily" ? "daily:test" : "endless:test:1",
+    seed:
+      options.mode === "daily"
+        ? "daily:test"
+        : options.mode === "level"
+          ? "level:test"
+          : "endless:test:1",
     rng: 12345,
     size,
     board: options.board ?? new Uint8Array(size * size),
@@ -41,6 +47,7 @@ export function makeState(options: StateOptions = {}): GameState {
     linesCleared: options.linesCleared ?? 0,
     status: "playing",
     startedAt: 1_760_000_000_000,
+    ...(options.level !== undefined ? { level: options.level } : {}),
   };
 }
 

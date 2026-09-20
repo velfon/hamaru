@@ -19,7 +19,7 @@ export interface CommonFields {
   platform: "ios" | "android" | "desktop" | "other";
   exp: string;
   variant: string;
-  mode: "endless" | "daily" | "";
+  mode: "endless" | "daily" | "level" | "";
 }
 
 export interface SessionStartFields {
@@ -32,7 +32,8 @@ export interface GameStartFields {
 }
 
 export interface GameEndFields {
-  reason: "over" | "abandon";
+  /** clear はレベルモードで目標に達した(docs/09 §6)。 */
+  reason: "over" | "abandon" | "clear";
   score: number;
   lines: number;
   moves: number;
