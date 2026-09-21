@@ -44,6 +44,9 @@ export default defineConfig({
         navigateFallback: "index.html",
         // 初回訪問でも SW がそのタブを制御する(= 次のリロードからオフラインで起動できる)。
         clientsClaim: true,
+        // 新しい SW をすぐ有効にする。これが無いと、既にアプリを開いたことのある人には
+        // **全部のタブを閉じるまで古い版が出続ける**(docs/02 §11 N-11)。
+        skipWaiting: true,
       },
       devOptions: {
         // 開発サーバでは SW を登録しない。E2E の offline シナリオは
