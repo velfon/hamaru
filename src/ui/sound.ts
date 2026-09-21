@@ -1,8 +1,10 @@
 /**
  * 音の切り替えと効果音の呼び出し口(docs/10 §4)。
  *
- * ゲーム画面のヘッダに音符ボタンを置く。これは **BGM と効果音のまとめて入切**で、
+ * ホームとゲーム画面のヘッダに音符ボタンを置く。これは **BGM と効果音のまとめて入切**で、
  * 片方だけ使いたい人は設定画面でそれぞれを切り替える。既定はどちらも OFF(docs/00 §5)。
+ * BGM が鳴るのは遊んでいる画面だけなので、ホームでは `playsMusic: false` で作り、
+ * ON にした合図として短い音だけ鳴らす。
  * 音を出す部分は **ON にした時に初めて読み込む**(`import()`)。OFF のままなら
  * 初回 JS にも AudioContext にも一切費用がかからない。
  */
@@ -31,7 +33,16 @@ export interface SoundControl {
   destroy(): void;
 }
 
-export function createSoundControl(config: ResolvedConfig): SoundControl {
+export interface SoundControlOptions {
+  /** この画面で BGM を鳴らすか(既定 true。ホームは false)。 */
+  playsMusic?: boolean;
+}
+
+export function createSoundControl(
+  config: ResolvedConfig,
+  options: SoundControlOptions = {},
+): SoundControl {
+  const playsMusic = options.playsMusic !== false;
   let player: MusicPlayer | null = null;
   let sfx: Sfx | null = null;
   let loading = false;
@@ -39,10 +50,17 @@ export function createSoundControl(config: ResolvedConfig): SoundControl {
 
   const button = el("button", { type: "button", class: "iconbtn", "data-testid": "sound" });
   button.addEventListener("click", () => {
+    let turnedOn = false;
     settingsStore.update((s) => {
       const on = !(s.music || s.sfx);
+      turnedOn = on;
       return { ...s, music: on, sfx: on };
     });
+    // BGM が鳴らない画面では、ON にしても何も聞こえない。短い合図を鳴らす。
+    if (turnedOn && !playsMusic) {
+      sfx?.prime();
+      sfx?.play("confirm");
+    }
   });
 
   function render(on: boolean): void {
@@ -64,8 +82,14 @@ export function createSoundControl(config: ResolvedConfig): SoundControl {
         volume: config.audio.volume,
       });
       sfx ??= audio.createSfx({ volume: config.audio.sfxVolume });
-      apply(settingsStore.get()); // 読み込んでいる間に変わっているかもしれない
-      if (gestured && settingsStore.get().sfx) sfx?.prime();
+      const now = settingsStore.get();
+      apply(now); // 読み込んでいる間に変わっているかもしれない
+      if (gestured && now.sfx) sfx?.prime();
+      // ボタンを押した流れで読み込んだ場合は、読み込み終わりに合図を鳴らす
+      if (!playsMusic && gestured && now.sfx && !confirmed) {
+        confirmed = true;
+        sfx?.play("confirm");
+      }
     });
   }
 
@@ -74,13 +98,14 @@ export function createSoundControl(config: ResolvedConfig): SoundControl {
     if (s.music || s.sfx) load();
     // ボタンで ON にした時は、その操作の中で音を温めておく(Safari 対策)。
     if (s.sfx) sfx?.prime();
-    if (s.music) player?.start();
+    if (s.music && playsMusic) player?.start();
     else player?.stop();
   }
 
   // 効果音は「置いた瞬間」に鳴る。最初の操作の中で AudioContext を作っておかないと
   // 1 音目が捨てられるので、最初の pointerdown で温める。
   let gestured = false;
+  let confirmed = false;
   const onGesture = (): void => {
     gestured = true;
     if (settingsStore.get().sfx) sfx?.prime();

@@ -11,7 +11,7 @@
 import { acquireAudio, releaseAudio, resumeAudio } from "./context";
 import { LADDER, midiToFreq } from "./score";
 
-export type SfxName = "place" | "clear" | "boardClear" | "levelClear" | "gameOver";
+export type SfxName = "place" | "clear" | "boardClear" | "levelClear" | "gameOver" | "confirm";
 
 /** 音色。player.ts の声部と違い、効果音は短い単発。 */
 export type Timbre = "click" | "pluck" | "bell" | "warm";
@@ -79,6 +79,9 @@ export function sfxNotes(name: SfxName, ctx: SfxContext = {}): SfxNote[] {
       const run = [0, 2, 3, 5].map((s, i) => at(ladder(s), i * 0.07, 0.7, 0.28, "pluck"));
       return [...run, at(ladder(5), 0.28, 1.4, 0.18, "bell")];
     }
+    case "confirm":
+      // 音を ON にしたときの合図。BGM が鳴らない画面(ホーム)で、音量の当たりを付けてもらう。
+      return [at(ladder(0), 0, 0.45, 0.26, "pluck"), at(ladder(3), 0.08, 0.5, 0.24, "pluck")];
     case "gameOver":
       // 下がる 3 音。責めない音にする(ラ → ファ → レ)。
       return [

@@ -69,6 +69,10 @@ test("音は既定 OFF。ゲーム画面のボタンで BGM と効果音をま�
     w.AudioContext = patched as unknown as new () => AudioContext;
   });
 
+  // ホームにもボタンがある(docs/10 §4)。ここで ON にできる
+  await page.goto("/");
+  await expect(page.getByTestId("sound")).toHaveAttribute("aria-pressed", "false");
+
   await page.goto("/#/play");
   const sound = page.getByTestId("sound");
   await expect(sound).toHaveAttribute("aria-pressed", "false");
@@ -96,6 +100,14 @@ test("音は既定 OFF。ゲーム画面のボタンで BGM と効果音をま�
   await page.goto("/#/settings");
   await expect(page.getByTestId("setting-music")).not.toBeChecked();
   await expect(page.getByTestId("setting-sfx")).not.toBeChecked();
+
+  // ホームのボタンでも同じように入切できる(BGM は鳴らさず、合図だけ鳴る)
+  await page.goto("/");
+  await page.getByTestId("sound").click();
+  await expect(page.getByTestId("sound")).toHaveAttribute("aria-pressed", "true");
+  await page.goto("/#/settings");
+  await expect(page.getByTestId("setting-music")).toBeChecked();
+  await expect(page.getByTestId("setting-sfx")).toBeChecked();
 });
 
 test("データを削除すると統計が 0 に戻る", async ({ page }) => {

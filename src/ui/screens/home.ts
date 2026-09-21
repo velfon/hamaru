@@ -2,7 +2,7 @@
  * ホーム(docs/01 §9.1)。
  *
  * ┌──────────────────────────────┐
- * │ HAMARU                  ⚙︎   │
+ * │ HAMARU               ♪  ⚙︎   │
  * │ ┌──────────────────────────┐ │
  * │ │ 今日の挑戦  9/17         │ │
  * │ │ [ 挑戦する ]   連続 4 日  │ │
@@ -22,9 +22,11 @@ import {
   totalStars,
   unlockedLevel,
 } from "../../storage/local";
+import { DEFAULT_CONFIG } from "../../config";
 import { button, iconButton, ICON_SETTINGS } from "../components/button";
 import { el, fillSlot } from "../dom";
 import { navigate, type Screen } from "../router";
+import { createSoundControl } from "../sound";
 import { statsStore } from "../store";
 
 const MINUTE = 60_000;
@@ -154,9 +156,13 @@ export function homeScreen(container: HTMLElement): Screen {
     glazebar.appendChild(span);
   }
 
+  // ホームでは BGM を鳴らさない(遊んでいる画面だけ。docs/10 §1)。
+  const sound = createSoundControl(DEFAULT_CONFIG, { playsMusic: false });
+
   const screen = el("div", { class: "screen", "data-testid": "home-screen" }, [
     el("div", { class: "topbar" }, [
       el("div", { class: "topbar__spacer" }),
+      sound.button,
       iconButton({
         label: t("home.settings"),
         paths: ICON_SETTINGS,
@@ -179,6 +185,7 @@ export function homeScreen(container: HTMLElement): Screen {
   return {
     unmount() {
       window.clearInterval(timer);
+      sound.destroy();
     },
   };
 }
