@@ -36,6 +36,7 @@ import { createDrag, type PlacementHost, type PlacementPreview } from "../drag";
 import { el, systemPrefersReducedMotion } from "../dom";
 import { boardClearFx, clearFx, dropFx, gameOverDelay, renderNumber, vibrate } from "../fx";
 import { createKeyboard } from "../keyboard";
+import { createMusicControl } from "../music";
 import { navigate, type Screen } from "../router";
 import { langStore, settingsStore } from "../store";
 import { createTrayView } from "../tray-view";
@@ -135,6 +136,8 @@ export function levelScreen(container: HTMLElement, query: URLSearchParams): Scr
   const goalValue = el("div", { class: "stat__value", "data-testid": "goal" });
   const traysValue = el("div", { class: "stat__value", "data-testid": "trays" });
 
+  const music = createMusicControl(config);
+
   const hud = el("div", { class: "hud" }, [
     iconButton({
       label: t("game.back"),
@@ -142,6 +145,7 @@ export function levelScreen(container: HTMLElement, query: URLSearchParams): Scr
       testId: "back",
       onClick: () => navigate("/levels"),
     }),
+    music.button,
     el("div", { class: "hud__scores" }, [
       el("div", { class: "stat stat--score" }, [
         el("span", { class: "stat__label" }, [t("game.score")]),
@@ -391,6 +395,7 @@ export function levelScreen(container: HTMLElement, query: URLSearchParams): Scr
       updateContext({ mode: "" });
       document.removeEventListener("visibilitychange", onVisibility);
       unsubscribeLang();
+      music.destroy();
       drag.destroy();
       keyboard.destroy();
       overlay?.remove();

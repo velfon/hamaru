@@ -134,6 +134,14 @@ export interface DailyConfig {
   readonly shareGaugeMax: number;
 }
 
+/** BGM(docs/10 §5)。音源は持たず、この値から合成する。 */
+export interface AudioConfig {
+  /** テンポ(1 分あたりの拍)。 */
+  readonly bpm: number;
+  /** 全体の音量 0〜1。 */
+  readonly volume: number;
+}
+
 export interface FxConfig {
   readonly clearDurationMs: number;
   readonly snapDurationMs: number;
@@ -161,5 +169,6 @@ export interface ResolvedConfig {
   readonly input: InputConfig;
   readonly daily: DailyConfig;
   readonly fx: FxConfig;
+  readonly audio: AudioConfig;
   readonly levels: LevelsConfig;
 }

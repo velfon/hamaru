@@ -148,6 +148,12 @@ p {
   color: var(--ink);
 }
 
+/* BGM が鳴っているとき(docs/10 §4)。hover より後・同じ強さでは負けるので一緒に指定する。 */
+.iconbtn--on,
+.iconbtn--on:hover {
+  color: var(--kintsugi);
+}
+
 .iconbtn svg {
   width: 22px;
   height: 22px;

@@ -24,6 +24,7 @@ import {
 import { track, updateContext } from "../../telemetry/client";
 import { createBoardView } from "../board-view";
 import { button, iconButton, ICON_BACK } from "../components/button";
+import { createMusicControl } from "../music";
 import { announce, toast } from "../components/toast";
 import { createDrag, type PlacementHost, type PlacementPreview } from "../drag";
 import { submitDaily, type Result, type SubmitJson } from "../leaderboard-api";
@@ -243,6 +244,8 @@ export function gameScreen(mode: Mode) {
       onClick: () => navigate("/"),
     });
 
+    const music = createMusicControl(config);
+
     const modeTag = el("div", { class: "modetag", "data-testid": "modetag" }, [
       mode === "daily"
         ? t("game.daily", { no: dailyLabelNo(dailyNumber(startDate, config.daily.epoch)) })
@@ -253,6 +256,7 @@ export function gameScreen(mode: Mode) {
     // ヘッダはワイヤ(docs/01 §9.2)どおり 1 行。← / スコア / ベスト / モードとストリーク。
     const hud = el("div", { class: "hud" }, [
       back,
+      music.button,
       el("div", { class: "hud__scores" }, [
         el("div", { class: "stat stat--score" }, [
           el("span", { class: "stat__label" }, [t("game.score")]),
@@ -667,6 +671,7 @@ export function gameScreen(mode: Mode) {
         updateContext({ mode: "" });
         document.removeEventListener("visibilitychange", onVisibility);
         unsubscribeLang();
+        music.destroy();
         drag.destroy();
         keyboard.destroy();
         overlay?.remove();

@@ -53,6 +53,43 @@ test("消去プレビューを OFF にするとハイライトが出ない", asy
   await drop();
 });
 
+test("BGM は既定 OFF。ゲーム画面のボタンで ON にでき、設定と同期する(docs/10 §4)", async ({
+  page,
+}) => {
+  // 音が出ているかは自動では確かめられないので、AudioContext が作られて走り出すことまでを見る。
+  await page.addInitScript(() => {
+    const w = window as unknown as { AudioContext: new () => AudioContext; __ctx?: AudioContext };
+    const Original = w.AudioContext;
+    const patched = function (): AudioContext {
+      const ctx = new Original();
+      w.__ctx = ctx;
+      return ctx;
+    };
+    patched.prototype = Original.prototype;
+    w.AudioContext = patched as unknown as new () => AudioContext;
+  });
+
+  await page.goto("/#/play");
+  const music = page.getByTestId("music");
+  await expect(music).toHaveAttribute("aria-pressed", "false");
+  expect(await page.evaluate(() => "__ctx" in window)).toBe(false); // OFF のうちは作らない
+
+  await music.click();
+  await expect(music).toHaveAttribute("aria-pressed", "true");
+  await expect
+    .poll(() =>
+      page.evaluate(() => (window as unknown as { __ctx?: AudioContext }).__ctx?.state ?? null),
+    )
+    .toBe("running");
+
+  await page.goto("/#/settings");
+  await expect(page.getByTestId("setting-music")).toBeChecked();
+  await page.getByTestId("setting-music").uncheck();
+
+  await page.goto("/#/play");
+  await expect(page.getByTestId("music")).toHaveAttribute("aria-pressed", "false");
+});
+
 test("データを削除すると統計が 0 に戻る", async ({ page }) => {
   // 1 ゲーム分の記録を作る。
   await page.goto("/#/play");

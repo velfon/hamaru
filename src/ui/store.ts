@@ -51,6 +51,7 @@ export const settingsStore = createStore<Settings>({
   haptics: true,
   motion: "system",
   previewClears: true,
+  music: false,
   leaderboard: true,
 });
 

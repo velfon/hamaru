@@ -72,6 +72,12 @@ const fxSchema = z.strictObject({
   snapDurationMs: z.number().min(0).max(2000),
 });
 
+/** BGM(docs/10 §5)。耳に痛い設定にならないよう範囲を絞る。 */
+const audioSchema = z.strictObject({
+  bpm: z.number().min(60).max(160),
+  volume: z.number().min(0).max(0.6),
+});
+
 /** レベルの難易度(docs/09 §2)。 */
 const levelsSchema = z
   .strictObject({
@@ -99,6 +105,7 @@ export const gameConfigSchema = z.strictObject({
   input: inputSchema,
   daily: dailySchema,
   fx: fxSchema,
+  audio: audioSchema,
   levels: levelsSchema,
 });
 

@@ -178,6 +178,8 @@ export interface Settings {
   haptics: boolean;
   motion: MotionSetting;
   previewClears: boolean;
+  /** BGM を鳴らす(docs/10)。既定は OFF(docs/00 §5)。 */
+  music: boolean;
   /** ランキングに参加する(デイリーの公式記録を送る)。docs/08 §3。 */
   leaderboard: boolean;
 }
@@ -188,6 +190,7 @@ export const DEFAULT_SETTINGS: Settings = {
   haptics: true,
   motion: "system",
   previewClears: true,
+  music: false,
   leaderboard: true,
 };
 
@@ -254,6 +257,7 @@ export function loadSettings(): Settings {
       haptics: pickBool(data["haptics"], DEFAULT_SETTINGS.haptics),
       motion: pickEnum(data["motion"], ["system", "always"] as const, DEFAULT_SETTINGS.motion),
       previewClears: pickBool(data["previewClears"], DEFAULT_SETTINGS.previewClears),
+      music: pickBool(data["music"], DEFAULT_SETTINGS.music),
       leaderboard: pickBool(data["leaderboard"], DEFAULT_SETTINGS.leaderboard),
     };
   });
