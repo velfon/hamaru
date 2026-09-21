@@ -18,6 +18,7 @@ import type { Bot } from "../../sim/bots/types";
 import {
   handleDelete,
   handleMe,
+  MAX_ATTEMPTS_PER_DAY,
   handleProfile,
   handleSubmit,
   handleTop,
@@ -112,7 +113,7 @@ async function submit(installId: string, date: string, moves: Move[], now = NOW,
 
 type Ranks = Record<
   string,
-  { rank: number | null; score: number | null; count: number; days?: number }
+  { rank: number | null; score: number | null; count: number; days?: number; attempts?: number }
 >;
 
 /* ------------------------------------------------------------------ */
@@ -129,25 +130,78 @@ describe("POST /api/daily/submit", () => {
     expect(r.body["accepted"]).toBe(true);
     expect(r.body["score"]).toBe(g.score);
     const ranks = r.body["ranks"] as Ranks;
-    expect(ranks["daily"]).toEqual({ rank: 1, score: g.score, count: 1 });
+    expect(ranks["daily"]).toEqual({ rank: 1, score: g.score, count: 1, attempts: 1 });
     expect(ranks["week"]).toEqual({ rank: 1, score: g.score, count: 1, days: 1 });
     expect(ranks["month"]?.rank).toBe(1);
     expect(ranks["all"]?.score).toBe(g.score);
   });
 
-  it("同じ日の 2 件目は無視し、合計を二重に足さない", async () => {
+  it("同じ日に何度でも挑戦でき、低い得点では記録も合計も動かない", async () => {
     const g = play(A, TODAY, greedyBot);
     await submit(A, TODAY, g.moves);
     const lower = play(A, TODAY, randomBot);
+    expect(lower.score).toBeLessThan(g.score);
     const r = await submit(A, TODAY, lower.moves);
-    expect(r.body["accepted"]).toBe(false);
-    expect(r.body["score"]).toBe(g.score);
-    expect((r.body["ranks"] as Ranks)["all"]).toEqual({
+    expect(r.body["accepted"]).toBe(true);
+    expect(r.body["improved"]).toBe(false);
+    expect(r.body["score"]).toBe(lower.score); // 今回の得点
+    expect(r.body["best"]).toBe(g.score); // その日のベストは据え置き
+    expect(r.body["attempts"]).toBe(2);
+    const ranks = r.body["ranks"] as Ranks;
+    expect(ranks["daily"]).toEqual({ rank: 1, score: g.score, count: 1, attempts: 2 });
+    // 合計は二重に足さない(1 日ぶんのまま)
+    expect(ranks["all"]).toEqual({ rank: 1, score: g.score, count: 1, days: 1 });
+  });
+
+  it("ベストを更新したら、その日の記録と合計が差分だけ上がる(日数は増えない)", async () => {
+    const lower = play(A, TODAY, randomBot);
+    const best = play(A, TODAY, greedyBot);
+    await submit(A, TODAY, lower.moves);
+    const r = await submit(A, TODAY, best.moves);
+    expect(r.body["improved"]).toBe(true);
+    expect(r.body["best"]).toBe(best.score);
+    expect(r.body["attempts"]).toBe(2);
+    const ranks = r.body["ranks"] as Ranks;
+    expect(ranks["daily"]?.score).toBe(best.score);
+    // 合計 = 低い方ではなくベストだけ(lower + best にならない)
+    expect(ranks["all"]).toEqual({ rank: 1, score: best.score, count: 1, days: 1 });
+    expect(ranks["week"]?.days).toBe(1);
+  });
+
+  it("前の日の記録があっても、その日のベスト更新は日数を増やさず差分だけ足す", async () => {
+    const yesterday = play(A, "2026-10-14", greedyBot);
+    const lower = play(A, TODAY, randomBot);
+    const best = play(A, TODAY, greedyBot);
+    await submit(A, "2026-10-14", yesterday.moves, NOW - DAY);
+    await submit(A, TODAY, lower.moves, NOW);
+    const r = await submit(A, TODAY, best.moves, NOW + 1000);
+    const ranks = r.body["ranks"] as Ranks;
+    expect(ranks["all"]).toEqual({
       rank: 1,
-      score: g.score,
+      score: yesterday.score + best.score,
       count: 1,
-      days: 1,
+      days: 2,
     });
+  });
+
+  it("1 日の挑戦回数には上限がある", async () => {
+    const g = play(A, TODAY, randomBot);
+    await db
+      .prepare(
+        `INSERT INTO daily_scores (date, player, score, lines, moves, submission_id, submitted_at, attempts)
+         VALUES (?1, ?2, 10, 1, 1, 'x', ?3, ?4)`,
+      )
+      .bind(TODAY, await sha256Hex(A), NOW, MAX_ATTEMPTS_PER_DAY)
+      .run();
+    const r = await submit(A, TODAY, g.moves);
+    expect(r.status).toBe(429);
+    expect(r.body["error"]).toBe("too_many_attempts");
+    // 記録は動かない
+    const row = await db
+      .prepare(`SELECT score, attempts FROM daily_scores WHERE date = ?1`)
+      .bind(TODAY)
+      .first<{ score: number; attempts: number }>();
+    expect(row).toEqual({ score: 10, attempts: MAX_ATTEMPTS_PER_DAY });
   });
 
   it("得点の高い順。同点は先に記録した人が上", async () => {
@@ -158,7 +212,12 @@ describe("POST /api/daily/submit", () => {
     await submit(A, TODAY, hi.moves, NOW + 1000);
     // C は B と同じ手・同じ得点だが後から
     const tie = await submit(C, TODAY, lo.moves, NOW + 2000);
-    expect((tie.body["ranks"] as Ranks)["daily"]).toEqual({ rank: 3, score: lo.score, count: 3 });
+    expect((tie.body["ranks"] as Ranks)["daily"]).toEqual({
+      rank: 3,
+      score: lo.score,
+      count: 3,
+      attempts: 1,
+    });
     const me = await handleMe(
       post("/api/leaderboard/me", { installId: B, period: "daily" }),
       env,

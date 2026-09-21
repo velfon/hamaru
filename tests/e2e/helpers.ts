@@ -172,11 +172,13 @@ interface Captured {
   invalid: string[];
   /** ランキング API への POST(本文)。docs/08 §6 */
   leaderboard: Array<{ path: string; body: Record<string, unknown> }>;
+  /** デイリーの送信回数(何度でも挑戦できる。docs/08 §1)。 */
+  attempts: number;
 }
 
 /** ランキング API の既定の応答(テストごとに page.route で上書きできる)。 */
 export const MOCK_RANKS = {
-  daily: { rank: 12, score: 3001, count: 348 },
+  daily: { rank: 12, score: 3001, count: 348, attempts: 1 },
   week: { rank: 3, score: 9000, count: 120, days: 3 },
   month: { rank: 5, score: 20000, count: 400, days: 7 },
   all: { rank: 40, score: 50000, count: 900, days: 20 },
@@ -213,7 +215,7 @@ const captured = new WeakMap<BrowserContext, Captured>();
 export const test = base.extend<{ telemetryCapture: Captured }>({
   telemetryCapture: [
     async ({ context, browserName }, use) => {
-      const box: Captured = { events: [], invalid: [], leaderboard: [] };
+      const box: Captured = { events: [], invalid: [], leaderboard: [], attempts: 0 };
       captured.set(context, box);
       if (browserName === "webkit") {
         // WebKit では sendBeacon の Blob 本文を Playwright が読めない(postData() が null)。
@@ -260,8 +262,19 @@ export const test = base.extend<{ telemetryCapture: Captured }>({
           const json = (status: number, data: unknown) =>
             route.fulfill({ status, contentType: "application/json", body: JSON.stringify(data) });
           switch (url.pathname) {
-            case "/api/daily/submit":
-              return json(200, { accepted: true, score: 3001, lines: 12, ranks: MOCK_RANKS });
+            case "/api/daily/submit": {
+              // 送信のたびに回数が増える(docs/08 §1)。得点は本文の手数から作らず固定で返す。
+              box.attempts += 1;
+              return json(200, {
+                accepted: true,
+                improved: box.attempts === 1,
+                score: 3001,
+                best: 3001,
+                attempts: box.attempts,
+                lines: 12,
+                ranks: { ...MOCK_RANKS, daily: { ...MOCK_RANKS.daily, attempts: box.attempts } },
+              });
+            }
             case "/api/leaderboard":
               return json(200, MOCK_TOP(url.searchParams.get("period") ?? "daily"));
             case "/api/leaderboard/me": {

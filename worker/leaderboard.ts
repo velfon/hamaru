@@ -124,15 +124,20 @@ const KEY_FORMAT: Record<Period, RegExp> = {
 
 export interface RankJson {
   rank: number | null;
+  /** デイリーはその日のベスト、週・月・全期間は合計。 */
   score: number | null;
   count: number;
+  /** 週・月・全期間のみ: 記録のある日数。 */
   days?: number;
+  /** デイリーのみ: その日の挑戦回数。 */
+  attempts?: number;
 }
 
 const DAILY_RANK_SQL = `
 SELECT d.score AS score,
   (SELECT COUNT(*) FROM daily_scores o
-    WHERE o.date = d.date AND (o.score > d.score OR (o.score = d.score AND o.submitted_at < d.submitted_at))) + 1 AS rank
+    WHERE o.date = d.date AND (o.score > d.score OR (o.score = d.score AND o.submitted_at < d.submitted_at))) + 1 AS rank,
+  d.attempts AS attempts
 FROM daily_scores d WHERE d.date = ?1 AND d.player = ?2`;
 
 const DAILY_COUNT_SQL = `SELECT COUNT(*) AS n FROM daily_scores WHERE date = ?1`;
@@ -154,10 +159,18 @@ export async function rankOf(
 ): Promise<RankJson> {
   if (period === "daily") {
     const [row, count] = await Promise.all([
-      db.prepare(DAILY_RANK_SQL).bind(key, player).first<{ score: number; rank: number }>(),
+      db
+        .prepare(DAILY_RANK_SQL)
+        .bind(key, player)
+        .first<{ score: number; rank: number; attempts: number }>(),
       db.prepare(DAILY_COUNT_SQL).bind(key).first<{ n: number }>(),
     ]);
-    return { rank: row?.rank ?? null, score: row?.score ?? null, count: count?.n ?? 0 };
+    return {
+      rank: row?.rank ?? null,
+      score: row?.score ?? null,
+      count: count?.n ?? 0,
+      ...(row ? { attempts: row.attempts } : {}),
+    };
   }
   const [row, count] = await Promise.all([
     db
@@ -187,6 +200,9 @@ async function ranksFor(db: Db, player: string, date: string): Promise<Record<Pe
 /* POST /api/daily/submit                                              */
 /* ------------------------------------------------------------------ */
 
+/** 1 日に受け付ける送信の上限(再生の CPU と書き込みを守る。docs/08 §2)。 */
+export const MAX_ATTEMPTS_PER_DAY = 50;
+
 export async function handleSubmit(
   request: Request,
   env: LeaderboardEnv,
@@ -214,39 +230,80 @@ export async function handleSubmit(
     return json({
       accepted: false,
       preview: true,
+      improved: true,
       score: state.score,
+      best: state.score,
+      attempts: 1,
       lines: state.linesCleared,
       ranks: null,
     });
   }
 
+  // 何度でも挑戦できる。送信のたびに attempts を数え、**より高い時だけ**記録を差し替える。
+  // 合計(totals)は「今回の得点 − それまでのその日のベスト」だけ足す(docs/08 §2)。
+  const previous = await env.DB.prepare(
+    `SELECT score, attempts FROM daily_scores WHERE date = ?1 AND player = ?2`,
+  )
+    .bind(date, player)
+    .first<{ score: number; attempts: number }>();
+
+  if (previous !== null && previous.attempts >= MAX_ATTEMPTS_PER_DAY) {
+    return problem(429, "too_many_attempts", { best: previous.score, attempts: previous.attempts });
+  }
+
   const submissionId = crypto.randomUUID();
-  const totals = (["week", "month", "all"] as const).map((period) =>
+  const periods = ["week", "month", "all"] as const;
+  // 1. その日の初めての記録なら、合計に丸ごと足して日数を 1 増やす
+  const firstOfDay = periods.map((period) =>
     env.DB.prepare(
       `INSERT INTO totals (period, key, player, total, days, updated_at)
        SELECT ?1, ?2, ?3, ?4, 1, ?5
-       WHERE EXISTS (SELECT 1 FROM daily_scores WHERE date = ?6 AND player = ?3 AND submission_id = ?7)
+       WHERE NOT EXISTS (SELECT 1 FROM daily_scores WHERE date = ?6 AND player = ?3)
        ON CONFLICT (period, key, player)
        DO UPDATE SET total = total + excluded.total, days = days + 1, updated_at = excluded.updated_at`,
-    ).bind(period, periodKey(period, date), player, state.score, now, date, submissionId),
+    ).bind(period, periodKey(period, date), player, state.score, now, date),
   );
-  const results = await env.DB.batch([
+  // 2. すでに記録があって今回の方が高いなら、差分だけ足す(日数は増やさない)
+  const improvement = periods.map((period) =>
     env.DB.prepare(
-      `INSERT INTO daily_scores (date, player, score, lines, moves, submission_id, submitted_at)
-       VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
-       ON CONFLICT (date, player) DO NOTHING`,
-    ).bind(date, player, state.score, state.linesCleared, state.moves, submissionId, now),
-    ...totals,
+      `UPDATE totals
+       SET total = total + ?4 - (SELECT score FROM daily_scores WHERE date = ?6 AND player = ?3),
+           updated_at = ?5
+       WHERE period = ?1 AND key = ?2 AND player = ?3
+         AND EXISTS (SELECT 1 FROM daily_scores WHERE date = ?6 AND player = ?3 AND score < ?4)`,
+    ).bind(period, periodKey(period, date), player, state.score, now, date),
+  );
+  // 3. その日の記録を更新する。**1・2 のあとに実行する**(上の SQL は更新前の値を読む)
+  const upsert = env.DB.prepare(
+    `INSERT INTO daily_scores (date, player, score, lines, moves, submission_id, submitted_at, attempts)
+     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, 1)
+     ON CONFLICT (date, player) DO UPDATE SET
+       attempts = daily_scores.attempts + 1,
+       score = MAX(daily_scores.score, excluded.score),
+       lines = CASE WHEN excluded.score > daily_scores.score THEN excluded.lines ELSE daily_scores.lines END,
+       moves = CASE WHEN excluded.score > daily_scores.score THEN excluded.moves ELSE daily_scores.moves END,
+       submission_id = CASE WHEN excluded.score > daily_scores.score THEN excluded.submission_id ELSE daily_scores.submission_id END,
+       submitted_at = CASE WHEN excluded.score > daily_scores.score THEN excluded.submitted_at ELSE daily_scores.submitted_at END`,
+  ).bind(date, player, state.score, state.linesCleared, state.moves, submissionId, now);
+
+  await env.DB.batch([
+    ...firstOfDay,
+    ...improvement,
+    upsert,
     env.DB.prepare(
       `INSERT INTO players (player, nickname, nickname_at, created_at) VALUES (?1, NULL, NULL, ?2)
        ON CONFLICT (player) DO NOTHING`,
     ).bind(player, now),
   ]);
-  const accepted = (results[0]?.meta.changes ?? 0) === 1;
+
+  const improved = previous === null || state.score > previous.score;
   const ranks = await ranksFor(env.DB, player, date);
   return json({
-    accepted,
-    score: accepted ? state.score : ranks.daily.score,
+    accepted: true,
+    improved,
+    score: state.score,
+    best: improved ? state.score : previous.score,
+    attempts: (previous?.attempts ?? 0) + 1,
     lines: state.linesCleared,
     ranks,
   });
@@ -260,6 +317,8 @@ interface TopRow {
   player: string;
   score: number;
   days?: number;
+  /** デイリーのみ: その日の挑戦回数(docs/08 §1)。 */
+  attempts?: number;
   nickname: string | null;
 }
 
@@ -281,7 +340,7 @@ export async function handleTop(
   if (p === "daily") {
     const [top, c] = await Promise.all([
       env.DB.prepare(
-        `SELECT d.player AS player, d.score AS score, p.nickname AS nickname
+        `SELECT d.player AS player, d.score AS score, d.attempts AS attempts, p.nickname AS nickname
          FROM daily_scores d LEFT JOIN players p ON p.player = d.player
          WHERE d.date = ?1 ORDER BY d.score DESC, d.submitted_at ASC LIMIT ${TOP_N}`,
       )
@@ -316,6 +375,7 @@ export async function handleTop(
         name: nameFor(r.player, r.nickname),
         score: r.score,
         ...(r.days !== undefined ? { days: r.days } : {}),
+        ...(r.attempts !== undefined ? { attempts: r.attempts } : {}),
       })),
     },
     200,

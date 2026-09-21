@@ -210,7 +210,9 @@ export function createSfx(opts: SfxOptions): Sfx | null {
       if (disposed || !build()) return;
       resumeAudio();
       const c = ctx as AudioContext;
-      if (c.state !== "running") return; // まだ操作がない。鳴らさずに捨てる
+      if (c.state === "closed") return;
+      // まだ動き出していなくても予約する。resume() は非同期なので、ここで捨てると
+      // 「音を出して最初の 1 手」が無音になる(遅い端末ほど起きやすい)。
       const now = c.currentTime + 0.005;
       for (const note of sfxNotes(name, context)) playNote(note, now + note.at);
     },

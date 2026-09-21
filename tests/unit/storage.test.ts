@@ -192,7 +192,7 @@ describe("レコード", () => {
   it("デイリー結果は 60 日分だけ残す", () => {
     for (let i = 0; i < DAILY_RESULTS_KEEP + 5; i++) {
       const date = new Date(Date.UTC(2026, 0, 1 + i)).toISOString().slice(0, 10);
-      saveDailyResult(date, { score: i, lines: i, isFirst: true });
+      saveDailyResult(date, { score: i, lines: i });
     }
     const all = loadDailyResults();
     expect(Object.keys(all)).toHaveLength(DAILY_RESULTS_KEEP);
@@ -201,8 +201,30 @@ describe("レコード", () => {
     expect(all[last]?.score).toBe(DAILY_RESULTS_KEEP + 4);
   });
 
+  it("同じ日に何度遊んでもベストだけ残り、回数が増える(docs/08 §1)", () => {
+    saveDailyResult("2026-10-05", { score: 251, lines: 3 });
+    expect(loadDailyResults()["2026-10-05"]).toEqual({ score: 251, lines: 3, attempts: 1 });
+
+    // 低い得点ではベストも消去数も変わらない
+    saveDailyResult("2026-10-05", { score: 100, lines: 1 });
+    expect(loadDailyResults()["2026-10-05"]).toEqual({ score: 251, lines: 3, attempts: 2 });
+
+    // 更新したらベストと消去数が入れ替わる
+    saveDailyResult("2026-10-05", { score: 1224, lines: 9 });
+    expect(loadDailyResults()["2026-10-05"]).toEqual({ score: 1224, lines: 9, attempts: 3 });
+
+    // 別の日は独立
+    saveDailyResult("2026-10-06", { score: 10, lines: 0 });
+    expect(loadDailyResults()["2026-10-06"]?.attempts).toBe(1);
+  });
+
+  it("古い保存(attempts なし)は 1 回として読む", () => {
+    writeKey(KEYS.dailyResults, { "2026-10-07": { score: 500, lines: 2, isFirst: true } });
+    expect(loadDailyResults()["2026-10-07"]).toEqual({ score: 500, lines: 2, attempts: 1 });
+  });
+
   it("不正な日付キーは読み飛ばす", () => {
-    saveDailyResult("2026-10-01", { score: 1, lines: 1, isFirst: true });
+    saveDailyResult("2026-10-01", { score: 1, lines: 1 });
     writeKey(KEYS.dailyResults, {
       "not-a-date": { score: 1 },
       "2026-10-02": { score: 2, lines: 0 },

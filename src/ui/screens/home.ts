@@ -50,7 +50,10 @@ export function homeScreen(container: HTMLElement): Screen {
   const countdown = el("span", { "data-testid": "countdown" });
 
   const stateLabel = todayResult
-    ? t("home.daily.done", { score: formatNumber(todayResult.score) })
+    ? t("home.daily.done", {
+        score: formatNumber(todayResult.score),
+        n: formatNumber(todayResult.attempts),
+      })
     : dailyInProgress
       ? t("home.daily.playing")
       : t("home.daily.new");
@@ -62,7 +65,7 @@ export function homeScreen(container: HTMLElement): Screen {
       : "card__state";
 
   const dailyButtonLabel = todayResult
-    ? t("over.practice")
+    ? t("over.retryDaily")
     : dailyInProgress
       ? t("home.resume")
       : t("home.daily.play");
@@ -84,7 +87,7 @@ export function homeScreen(container: HTMLElement): Screen {
       label: dailyButtonLabel,
       variant: "primary",
       testId: "daily-play",
-      onClick: () => navigate(todayResult ? "/daily?practice=1" : "/daily"),
+      onClick: () => navigate("/daily"),
     }),
     el("div", { class: "card__meta card__meta--split" }, [
       countdown,
