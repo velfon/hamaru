@@ -38,6 +38,11 @@
   flex: none;
 }
 
+/* 2 つ目(BGM)は戻るに寄せすぎない。 */
+.hud .iconbtn + .iconbtn {
+  margin-left: -4px;
+}
+
 .hud__meta {
   margin-left: auto;
   display: flex;

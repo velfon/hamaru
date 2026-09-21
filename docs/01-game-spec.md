@@ -123,6 +123,11 @@
 ### 8.3 ハプティクス
 - 配置成功で `navigator.vibrate(10)`、消去で `vibrate([10, 30, 20])`。設定で OFF 可(`settings.haptics`、既定 ON)。非対応環境では無視。
 
+### 8.4 音(BGM)
+- 遊んでいる画面(エンドレス / デイリー / レベル)でだけ BGM を鳴らす。**既定は OFF**(docs/00 §5)。
+- 設定「BGM」と、ゲーム画面ヘッダの音符ボタンのどちらでも切り替えられる(同じ設定 `settings.music`)。
+- 音源ファイルは持たず、Web Audio で合成する。曲と実装は [10-audio.md](10-audio.md)。
+
 ## 9. 画面
 
 ルーティングはハッシュ(`#/`, `#/play`, `#/daily`, `#/settings`, `#/about`)。単一 HTML。

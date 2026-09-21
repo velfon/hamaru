@@ -49,7 +49,7 @@ function select<K extends keyof Settings>(
 }
 
 function toggle(
-  key: "haptics" | "previewClears" | "leaderboard",
+  key: "haptics" | "previewClears" | "leaderboard" | "music",
   label: string,
   testId: string,
 ): HTMLElement {
@@ -116,6 +116,11 @@ export function settingsScreen(container: HTMLElement): Screen {
         ),
       ),
       row(t("settings.preview"), toggle("previewClears", t("settings.preview"), "setting-preview")),
+      row(
+        t("settings.music"),
+        toggle("music", t("settings.music"), "setting-music"),
+        t("settings.music.hint"),
+      ),
       row(
         t("settings.leaderboard"),
         toggle("leaderboard", t("settings.leaderboard"), "setting-leaderboard"),

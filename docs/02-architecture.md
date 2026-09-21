@@ -57,6 +57,9 @@ hamaru/
 │   │   ├── fx.ts              # 演出(吸着・金継ぎ消去・全消し)
 │   │   ├── share.ts
 │   │   └── components/{button,toast,dialog}.ts
+│   ├── audio/                 # BGM(10 参照)。音源ファイルは持たない
+│   │   ├── score.ts           # ★ 純粋。小節ごとの音符を作る
+│   │   └── player.ts          # Web Audio で鳴らす(先読み予約)
 │   ├── telemetry/
 │   │   ├── client.ts          # キュー・バッチ・sendBeacon
 │   │   ├── events.ts          # イベント型(04 と 1:1)
@@ -181,7 +184,9 @@ export function fillRatio(board: Board): number;
   "scoring": { "perCell": 1, "lineBase": 10, "streak": { "step": 0.25, "max": 2.0 }, "boardClearBonus": 300 },
   "input": { "touchLiftOffset": 70, "previewClears": true },
   "daily": { "epoch": "2026-10-01", "shareGaugeMax": 6000 },
-  "fx": { "clearDurationMs": 320, "snapDurationMs": 120 }
+  "fx": { "clearDurationMs": 320, "snapDurationMs": 120 },
+  "audio": { "bpm": 104, "volume": 0.32 },
+  "levels": { "goalBase": 3, "...": 0 }
 }
 ```
 zod スキーマ(`schema.ts`)で **範囲制約**を付ける(例: `threshold` は 0〜1、`weights` の各値は 0〜5、`size` は 6〜12)。**範囲外はビルド失敗**。これは改善エージェントの暴走に対する第一の物理的な壁。
