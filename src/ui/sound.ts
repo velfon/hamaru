@@ -75,22 +75,28 @@ export function createSoundControl(
   function load(): void {
     if (loading || destroyed) return;
     loading = true;
-    void import("../audio").then((audio) => {
-      if (destroyed) return;
-      player ??= audio.createMusicPlayer({
-        bpm: config.audio.bpm,
-        volume: config.audio.volume,
-      });
-      sfx ??= audio.createSfx({ volume: config.audio.sfxVolume });
-      const now = settingsStore.get();
-      apply(now); // 読み込んでいる間に変わっているかもしれない
-      if (gestured && now.sfx) sfx?.prime();
-      // ボタンを押した流れで読み込んだ場合は、読み込み終わりに合図を鳴らす
-      if (!playsMusic && gestured && now.sfx && !confirmed) {
-        confirmed = true;
-        sfx?.play("confirm");
-      }
-    });
+    void import("../audio").then(
+      (audio) => {
+        if (destroyed) return;
+        player ??= audio.createMusicPlayer({
+          bpm: config.audio.bpm,
+          volume: config.audio.volume,
+        });
+        sfx ??= audio.createSfx({ volume: config.audio.sfxVolume });
+        const now = settingsStore.get();
+        apply(now); // 読み込んでいる間に変わっているかもしれない
+        if (gestured && now.sfx) sfx?.prime();
+        // ボタンを押した流れで読み込んだ場合は、読み込み終わりに合図を鳴らす
+        if (!playsMusic && gestured && now.sfx && !confirmed) {
+          confirmed = true;
+          sfx?.play("confirm");
+        }
+      },
+      () => {
+        // 版が入れ替わった直後など、古いチャンクが取れないことがある。次の操作で取り直す。
+        loading = false;
+      },
+    );
   }
 
   function apply(s: Settings): void {

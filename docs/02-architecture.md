@@ -423,6 +423,18 @@ LCP 要素は JS が描く文字で、内訳の 73 % が描画待ち(JS のダ�
 `deploy` を `validate:config && VITE_APP_VERSION=$GIT_SHA vite build && wrangler deploy --var APP_VERSION:$GIT_SHA` に直し、
 `tests/unit/scripts-contract.test.ts` でこの順序と版の注入を固定した。PR プレビューも `VITE_APP_VERSION=pr-<n>-<sha>` でビルドする。
 
+### N-14. 新しい版をすぐ届ける(`skipWaiting`)(§1 PWA、2026-09-21)
+`registerType: "autoUpdate"` + `injectRegister: "script-defer"` の組み合わせだと、生成される SW は
+**`SKIP_WAITING` メッセージを受け取ったときだけ** `self.skipWaiting()` を呼ぶ。だが script-defer で
+差し込まれる `registerSW.js` は素の `register()` だけで、そのメッセージを送らない。
+結果、新しい SW は `waiting` のまま止まり、**アプリを開いたことのある人には全部のタブを閉じるまで
+古い版が出続ける**(実際にデプロイ後、再読み込みを 2 回しても古いバンドルのままだった)。
+
+`workbox.skipWaiting: true` を足して、新しい SW が入った時点で有効になるようにした
+(`clientsClaim` と合わせて、次の読み込みから新しい資産になる)。
+版が入れ替わった直後は古い遅延チャンク(音)が取れないことがあるので、`import()` の失敗は
+握りつぶして次の操作で取り直す。
+
 ### N-13. ランキング(docs/08)の構成
 - Worker の経路に `/api/daily/submit` `/api/leaderboard` `/api/leaderboard/me` `/api/profile` `/api/profile/delete` を追加(`worker/leaderboard.ts`)。
   POST はすべて Origin 検査。installId は本文で送り、URL には載せない

@@ -30,3 +30,12 @@ describe("package.json scripts", () => {
     expect(script).toContain("--var APP_VERSION:${GIT_SHA:-dev}");
   });
 });
+
+describe("PWA の更新(docs/02 §11 N-14)", () => {
+  const config = readFileSync(new URL("../../vite.config.ts", import.meta.url), "utf8");
+
+  it("skipWaiting が有効(古い版が居座らない)", () => {
+    expect(config).toMatch(/skipWaiting:\s*true/);
+    expect(config).toMatch(/clientsClaim:\s*true/);
+  });
+});
