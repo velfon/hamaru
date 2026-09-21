@@ -90,7 +90,9 @@ test("daily: navigator.share が無ければクリップボードにコピーし
   await expectEvent(page, (e) => e["event"] === "share" && e["method"] === "copy");
 });
 
-test("daily: 達成後は練習で再挑戦でき、記録は上書きしない", async ({ page }) => {
+test("daily: 達成後も何度でも挑戦でき、記録はその日のベストになる(docs/08 §1)", async ({
+  page,
+}) => {
   await page.addInitScript(() => {
     Object.defineProperty(navigator, "share", {
       configurable: true,
@@ -101,12 +103,20 @@ test("daily: 達成後は練習で再挑戦でき、記録は上書きしない"
   await dragPiece(page, 0, 0, 0);
   const overlay = page.getByTestId("gameover");
   await expect(overlay).toBeVisible({ timeout: 10_000 });
-  await overlay.getByTestId("practice").click();
 
-  await expect(page.getByTestId("modetag")).toContainText("Practice");
+  // 3001 点で 1 回目。ベストと挑戦回数が出る
+  await expect(overlay.getByTestId("daily-best")).toContainText("1");
+  const first = await page.evaluate(() => localStorage.getItem("hamaru:v1:daily:results"));
+  expect(first).toContain('"score":3001');
+  expect(first).toContain('"attempts":1');
+
+  // もう一度挑戦する。練習ではなく、これも公式
+  await overlay.getByTestId("retry-daily").click();
+  await expect(page.getByTestId("modetag")).not.toContainText("Practice");
   await expect(page.getByTestId("score")).toHaveText("0");
 
-  // 練習は公式記録を書き換えない。
+  // 遊び直しても、その日のベストは残っている(更新は saveDailyResult の単体テスト)
+  await dragPiece(page, 0, 0, 0);
   const stored = await page.evaluate(() => localStorage.getItem("hamaru:v1:daily:results"));
   expect(stored).toContain('"score":3001');
 });

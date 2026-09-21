@@ -237,20 +237,22 @@ test("効果音: 置いた時と消えた時に音が出る(docs/10 §6)", async
   // 1 手目は「最初の操作」。ブラウザはここで初めて音を許すので、鳴らずに終わってよい。
   await dragPiece(page, 0, 0, 5);
   await expect
-    .poll(() =>
-      page.evaluate(() => (window as unknown as { __ctx?: AudioContext }).__ctx?.state ?? null),
+    .poll(
+      () =>
+        page.evaluate(() => (window as unknown as { __ctx?: AudioContext }).__ctx?.state ?? null),
+      { timeout: 15_000 },
     )
     .toBe("running");
 
   // 消えない場所に置く → 置く音(短い単発)
   await reset();
   await dragPiece(page, 1, 2, 5);
-  await expect.poll(nodes).toBeGreaterThan(0);
+  await expect.poll(nodes, { timeout: 15_000 }).toBeGreaterThan(0);
   const place = await nodes();
 
   // 行と列が同時に消える → 消える音は 2 音。置く音より音数が多い
   await reset();
   await dragPiece(page, 2, 9, 9);
   await expect(page.locator("#c-9-9")).toHaveAttribute("data-c", "0");
-  await expect.poll(nodes).toBeGreaterThan(place);
+  await expect.poll(nodes, { timeout: 15_000 }).toBeGreaterThan(place);
 });

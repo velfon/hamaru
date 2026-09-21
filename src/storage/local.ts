@@ -224,9 +224,12 @@ export interface InstallRecord {
 }
 
 export interface DailyResult {
+  /** その日のベスト(docs/08 §1、2026-09-21 から何度でも挑戦できる)。 */
   score: number;
+  /** ベストを出したときの消去数。 */
   lines: number;
-  isFirst: boolean;
+  /** その日に遊んだ回数。 */
+  attempts: number;
 }
 
 export type DailyResults = Record<string, DailyResult>;
@@ -320,7 +323,7 @@ export function loadDailyResults(): DailyResults {
       out[date] = {
         score: pickNumber(value["score"], 0),
         lines: pickNumber(value["lines"], 0),
-        isFirst: pickBool(value["isFirst"], false),
+        attempts: Math.max(1, pickNumber(value["attempts"], 1)),
       };
     }
     return out;
@@ -328,10 +331,24 @@ export function loadDailyResults(): DailyResults {
   return v ?? {};
 }
 
-/** 1 日分の結果を記録し、古い日付を捨てる。 */
-export function saveDailyResult(date: string, result: DailyResult): DailyResults {
+/**
+ * 1 日分の結果を記録し、古い日付を捨てる。
+ * 同じ日に何度遊んでも**ベストだけ**を残し、回数を数える(docs/08 §1)。
+ */
+export function saveDailyResult(
+  date: string,
+  result: { score: number; lines: number },
+): DailyResults {
   const all = loadDailyResults();
-  all[date] = result;
+  const previous = all[date];
+  all[date] =
+    previous === undefined
+      ? { score: result.score, lines: result.lines, attempts: 1 }
+      : {
+          score: Math.max(previous.score, result.score),
+          lines: result.score > previous.score ? result.lines : previous.lines,
+          attempts: previous.attempts + 1,
+        };
   const dates = Object.keys(all).sort();
   const drop = dates.slice(0, Math.max(0, dates.length - DAILY_RESULTS_KEEP));
   for (const d of drop) delete all[d];

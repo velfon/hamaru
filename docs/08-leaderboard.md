@@ -9,11 +9,17 @@
 |---|---|
 | ランキングの種類 | デイリー / ウィークリー / マンスリー / 全期間 |
 | 順位の基準 | デイリー = その日のデイリーの得点。週・月・全期間 = **期間中のデイリー得点の合計** |
-| 対象になる得点 | デイリーの**公式記録(その日の初回)だけ**。練習・エンドレスは対象外 |
+| 対象になる得点 | デイリーの**その日のベスト**(何度でも挑戦できる)。エンドレスは対象外 |
 | 名前 | 既定は**自動の匿名名**(例「青磁の陶工 4821」)。任意で**ニックネーム**を付けられる |
 
 合計にしたのは、毎日遊ぶほど上がる仕組みが再訪(`d1_return`)に効くため。エンドレスは人ごとに問題が違い、
 実験で設定も変わるので、公平な比較と得点の検証ができない。
+
+**2026-09-21 の変更(ユーザー判断)**: 当初は「その日の初回だけが公式」だった。
+ブロックパズルのランキングは「ベストスコア・回数無制限」が定石で、1 回で終わる作りは
+繰り返し遊ぶ動機を消してしまう(順位の付くデイリーは 1 回で終わり、何度でも遊べるエンドレスには
+順位が無い、という状態だった)。**その日のベスト**に変え、挑戦回数も表示する。
+代わりに「同じ盤を繰り返して詰める」遊びに性格が変わることは受け入れる。
 
 ## 2. 得点の検証(不正対策の中心)
 
@@ -24,7 +30,13 @@
   をクライアントと同じ関数で解決する(Worker は同じ JSON をバンドルしている)
 - 受け付けるのは**ゲームオーバーまで打ち切った手の列**だけ(途中の手の列は 400)
 - 日付は UTC の**今日か昨日**だけ(日付をまたいで遊んだ人のための猶予。docs/01 §13)
-- 1 人 1 日 1 件。**先に届いたものが公式**で、2 件目以降は無視する(二重送信・練習の誤送信に強い)
+- 1 人 1 日 **1 行**。送信のたびに `attempts` を 1 増やし、**それまでのベストより高いときだけ**
+  得点・消去数・手数・時刻を差し替える。同点なら**先に達した方**を残す(順位の同点処理と揃える)
+- 合計(`totals`)は **「今回の得点 − それまでのその日のベスト」** だけ足す。
+  日数(`days`)はその日の初回だけ増やす。更新前の値を読む必要があるので、
+  SQL は「合計の更新 → その日の行の更新」の順に並べる(1 つの `batch` = 1 トランザクション)
+- 1 日の送信は **50 回まで**(`MAX_ATTEMPTS_PER_DAY`)。超えたら 429 `too_many_attempts`。
+  再生の CPU と D1 の書き込みを守るための上限で、普通に遊ぶ分には当たらない
 - 手の数の上限は 2000(`MAX_REPLAY_MOVES`)。本文の上限は 32 KB
 - 計測: 最長の greedy ボットのデイリー(161 手)の再生は 0.24 ms(M シリーズ Mac)。Workers 無料枠の CPU 10 ms に十分収まる
 - クライアントとサーバの版がずれて再生結果が合わない(ルール変更の直後など)と、手が不正になり 422。
@@ -56,11 +68,12 @@ CREATE TABLE players (
 CREATE TABLE daily_scores (
   date          TEXT NOT NULL,    -- YYYY-MM-DD(UTC)
   player        TEXT NOT NULL,
-  score         INTEGER NOT NULL,
-  lines         INTEGER NOT NULL,
+  score         INTEGER NOT NULL, -- その日のベスト
+  lines         INTEGER NOT NULL, -- ベストを出した回の消去数
   moves         INTEGER NOT NULL,
-  submission_id TEXT NOT NULL,    -- 送信ごとの乱数。合計の加算を「この送信が入ったとき」に限定する
-  submitted_at  INTEGER NOT NULL,
+  submission_id TEXT NOT NULL,    -- ベストを出した送信の乱数
+  submitted_at  INTEGER NOT NULL, -- ベストに達した時刻(同点はこれが早い方が上)
+  attempts      INTEGER NOT NULL DEFAULT 1,  -- その日の送信回数(migrations/0002)
   PRIMARY KEY (date, player)
 );
 CREATE INDEX daily_rank ON daily_scores (date, score DESC, submitted_at);
@@ -78,11 +91,12 @@ CREATE INDEX totals_rank ON totals (period, key, total DESC, updated_at);
 ```
 
 - 週は **ISO 週**(月曜始まり、UTC)、月は UTC の暦月。キーはデイリーの**日付**から決める(送信時刻ではない)
-- 送信は 1 回の `batch`(トランザクション)で実行する:
-  1. `INSERT … ON CONFLICT (date, player) DO NOTHING`(submission_id 付き)
-  2. 週・月・全期間の `totals` に `INSERT … SELECT … WHERE EXISTS (この submission_id の行) ON CONFLICT DO UPDATE SET total = total + excluded.total`
-  3. `players` に `INSERT … ON CONFLICT DO NOTHING`
-  2 件目以降の送信は 1 が何もしないので、2 も加算されない(二重加算しない)
+- 送信は 1 回の `batch`(トランザクション)で、**この順に**実行する:
+  1. その日が初めてなら `totals` に丸ごと足す(`WHERE NOT EXISTS (その日の行)`、`days + 1`)
+  2. すでに行があって今回が高いなら、`total + 今回 − その日のベスト` に更新する(日数は増やさない)
+  3. `daily_scores` を upsert(`attempts + 1`、高いときだけ得点などを差し替え)
+  4. `players` に `INSERT … ON CONFLICT DO NOTHING`
+  1・2 は**更新前の**その日の得点を読むので、必ず 3 より前に置く
 - 順位 = 自分より得点(合計)が高い人数 + 1。同点は**先に達した人**が上(`submitted_at` / `updated_at`)
 - 無料枠: 書き込み 10 万行/日(1 送信 = 最大 5 行)、読み取り 500 万行/日。順位表は 30 秒キャッシュする
 
@@ -129,7 +143,7 @@ installId は URL に載せない(本文で送る)。すべて同一オリジン
 
 | メソッド・パス | 本文 / クエリ | 応答 |
 |---|---|---|
-| `POST /api/daily/submit` | `{ installId, date, moves: [[t,x,y], …], version }` | 200 `{ accepted, score, lines, ranks }`。accepted=false は 2 件目以降。400 本文不正 / 422 再生不一致 |
+| `POST /api/daily/submit` | `{ installId, date, moves: [[t,x,y], …], version }` | 200 `{ accepted, improved, score, best, attempts, lines, ranks }`。`score` は今回、`best` はその日のベスト。400 本文不正 / 422 再生不一致 / 429 その日の上限 |
 | `GET /api/leaderboard?period=daily\|week\|month\|all&key=<任意>` | key 省略時は今日・今週・今月・all | 200 `{ period, key, count, top: [{ rank, name, score, days? }] }`(上位 50)。`cache-control: max-age=30` |
 | `POST /api/leaderboard/me` | `{ installId, period, key? }` | 200 `{ rank, score, count, name }` または `{ rank: null }` |
 | `POST /api/profile` | `{ installId, nickname: string \| null }` | 200 `{ name }` / 400 `{ error: "invalid" \| "banned" }` / 429 |
@@ -137,13 +151,17 @@ installId は URL に載せない(本文で送る)。すべて同一オリジン
 
 `name` の形は `{ nickname: string } | { auto: [adj, noun, num] }`。表示はクライアントが言語に合わせて組み立てる。
 `ranks` は `{ daily, week, month, all }` で、それぞれ `{ rank, score, count }`。
+デイリーには `attempts`(その日の挑戦回数)、週・月・全期間には `days`(記録のある日数)が付く。
+`GET /api/leaderboard?period=daily` の各行にも `attempts` が入る。
 
 PR プレビュー(`LEADERBOARD=off`)では書き込み系が本番の D1 に書かない(送信は検証だけして `preview: true` を返す)。
 
 ## 7. 画面
 
-- **ゲームオーバー(デイリーの公式記録)**: 送信して「今日 12 位 / 348 人」を出す。送信中は「記録しています…」、
-  失敗時は「ランキングに記録できませんでした」(ゲーム結果そのものは端末に保存済み)。「ランキングを見る」ボタン
+- **ゲームオーバー(デイリー)**: 送信して「今日 12 位 / 348 人」と、
+  「自己ベスト更新(3 回目)」または「今日のベスト 1,224(3 回目)」を出す。送信中は「記録しています…」、
+  失敗時は「ランキングに記録できませんでした」(ゲーム結果そのものは端末に保存済み)。
+  「ランキングを見る」と「もう一度挑戦」ボタン
 - **ホームのデイリーカード**: 「ランキング」ボタン
 - **ランキング画面 `#/ranking`**: タブ「今日 / 今週 / 今月 / 全期間」、上位 50、自分の行を強調、自分の順位(圏外でも)、
   自分の名前と「名前を変える」。読み込み中・空(「まだ記録がありません。今日の挑戦で最初の記録を」)・オフライン・失敗の状態

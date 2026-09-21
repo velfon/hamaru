@@ -49,7 +49,8 @@ test("ランキング画面: 上位・自分の行・タブ", async ({ page }) =
   await expect(rows.nth(1)).toContainText("こはる");
   await expect(rows.nth(0)).toContainText("Persimmon Kiln keeper 1203");
   await expect(page.getByTestId("my-name")).toHaveText("Celadon Potter 0421");
-  await expect(page.getByTestId("my-rank")).toHaveText("#2 of 348");
+  // デイリーは「その日のベスト」。挑戦回数も並ぶ(docs/08 §1)
+  await expect(page.getByTestId("my-rank")).toHaveText("#2 of 348 · 1 tries");
 
   await page.getByTestId("tab-week").click();
   await expect(page.getByTestId("tab-week")).toHaveAttribute("aria-selected", "true");

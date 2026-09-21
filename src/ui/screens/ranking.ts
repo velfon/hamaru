@@ -117,6 +117,7 @@ export function rankingScreen(container: HTMLElement, query: URLSearchParams): S
         ? el("span", { class: "muted", "data-testid": "my-rank" }, [t("ranking.noRecord")])
         : el("span", { class: "ranking__myrank", "data-testid": "my-rank" }, [
             t("ranking.myRank", { rank: formatNumber(me.rank), count: formatNumber(me.count) }),
+            me.attempts === undefined ? "" : ` · ${t("ranking.attempts", { n: me.attempts })}`,
           ]);
     meCard.replaceChildren(
       el("div", { class: "ranking__mehead" }, [
@@ -159,6 +160,10 @@ export function rankingScreen(container: HTMLElement, query: URLSearchParams): S
             el("span", { class: "ranking__name" }, [formatName(row.name)]),
             row.days !== undefined
               ? el("span", { class: "ranking__days" }, [t("ranking.days", { n: row.days })])
+              : null,
+            // デイリーは「その日のベスト」。何回挑戦したかも見せる(docs/08 §1)。
+            row.attempts !== undefined
+              ? el("span", { class: "ranking__days" }, [t("ranking.attempts", { n: row.attempts })])
               : null,
             el("span", { class: "ranking__score" }, [formatNumber(row.score)]),
           ],

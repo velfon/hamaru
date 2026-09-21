@@ -32,7 +32,7 @@
 | `session_start` | 起動、または 30 分無操作後の復帰 | `ref`: `direct` / `share` / `pwa` / `other`(URL `?r=` と `display-mode`) |
 | `game_start` | 新規ゲーム開始 | `resumed`: 0/1、`isPractice`: 0/1 |
 | `game_end` | ゲームオーバー、または「はじめから」で破棄 | `reason`: `over` / `abandon`、`score`、`lines`、`moves`、`durationMs`(アクティブ時間のみ。非表示中は止める)、`round`、`longestStreak`、`isPractice`、`fillRatioAtEnd` |
-| `daily_result` | デイリーの公式記録確定(初回のみ) | `dailyNo`、`score`、`lines` |
+| `daily_result` | デイリーの**その日の初回**の終了(1 日 1 件) | `dailyNo`、`score`、`lines` |
 | `share` | 共有ボタン押下 | `method`: `share` / `copy` |
 | `error` | `window.onerror` / `unhandledrejection` / config フォールバック | `message`(先頭 200 文字)、`stackHash`(cyrb53 の 16 進)、`kind`: `js` / `promise` / `config` |
 | `vital` | web-vitals 計測 | `name`: `LCP` / `INP` / `CLS`、`value` |
@@ -264,6 +264,14 @@ Metrics check ワークフローで本物の SQL API に投げて確認した。
   `FORMAT JSONEachRow` は通った(セッション行・初回日・所要時間・スコアの 4 クエリが成功)。
 - **`if()` の 2 つの分岐は同じ型でなければならない**。`if(c, 0.005, if(c2, 8, 50))` は
   「Double and Integer」で 422 になった。数値リテラルは `float()` で `8.0` の形にそろえる(回帰テストあり)。
+
+### N-10. デイリーが「その日のベスト」になっても列の意味は変えない(2026-09-21)
+docs/08 §1 の変更で、デイリーは 1 日に何度でも挑戦できるようになった。テレメトリは**そのまま**にする:
+
+- `daily_result` は **その日の初回の終了時だけ**送る(1 日 1 件という意味を保つ)。
+  2 回目以降の挑戦は `game_end`(`mode=daily`)で数えられる
+- `isPractice` 列は残し、常に 0 を送る(練習という区別をやめたため)。列を消すと過去のデータが読めなくなる
+- ベスト更新の回数を見たくなったら**新しい列を足す**(意味の変更はしない)
 
 ### N-9. レベルモードの追記(2026-09-18、docs/09 §6)
 `mode` に `"level"`、`game_end.reason` に `"clear"` を足した(列の位置は変えない)。

@@ -656,6 +656,13 @@ dialog.dialog::backdrop {
   white-space: nowrap;
 }
 
+.overlay__best {
+  display: block;
+  margin-top: 2px;
+  color: var(--ink-muted);
+  font-size: 13px;
+}
+
 .ranking__days {
   color: var(--ink-muted);
   font-size: var(--fs-small);

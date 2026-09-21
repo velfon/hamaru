@@ -11,15 +11,26 @@ export type NameJson = { nickname: string } | { auto: readonly [number, number, 
 
 export interface RankJson {
   rank: number | null;
+  /** デイリーはその日のベスト、週・月・全期間は合計。 */
   score: number | null;
   count: number;
+  /** 週・月・全期間のみ: 記録のある日数。 */
   days?: number;
+  /** デイリーのみ: その日の挑戦回数。 */
+  attempts?: number;
 }
 
 export interface SubmitJson {
   accepted: boolean;
   preview?: boolean;
+  /** 今回の得点がその日のベストを更新したか。 */
+  improved: boolean;
+  /** 今回の得点。 */
   score: number | null;
+  /** その日のベスト(更新しなければ以前の記録)。 */
+  best: number;
+  /** その日の挑戦回数(今回を含む)。 */
+  attempts: number;
   lines: number;
   ranks: Record<Period, RankJson> | null;
 }
@@ -28,7 +39,7 @@ export interface TopJson {
   period: Period;
   key: string;
   count: number;
-  top: Array<{ rank: number; name: NameJson; score: number; days?: number }>;
+  top: Array<{ rank: number; name: NameJson; score: number; days?: number; attempts?: number }>;
 }
 
 export interface MeJson extends RankJson {
@@ -37,7 +48,8 @@ export interface MeJson extends RankJson {
   name: NameJson;
 }
 
-export type Failure = "network" | "rejected" | "server" | "invalid" | "banned" | "cooldown";
+export type Failure =
+  "network" | "rejected" | "server" | "invalid" | "banned" | "cooldown" | "too_many";
 export type Result<T> = { ok: true; data: T } | { ok: false; reason: Failure };
 
 async function call<T>(path: string, init?: RequestInit): Promise<Result<T>> {
@@ -58,7 +70,10 @@ async function call<T>(path: string, init?: RequestInit): Promise<Result<T>> {
       return { ok: false, reason: "server" };
     }
   }
-  if (res.status === 429) return { ok: false, reason: "cooldown" };
+  if (res.status === 429) {
+    // 1 日の挑戦回数の上限(docs/08 §2)とニックネームの連打を区別する。
+    return { ok: false, reason: path === "/api/daily/submit" ? "too_many" : "cooldown" };
+  }
   if (res.status === 400 || res.status === 422) {
     let error = "";
     try {
