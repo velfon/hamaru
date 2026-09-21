@@ -52,6 +52,7 @@ export const settingsStore = createStore<Settings>({
   motion: "system",
   previewClears: true,
   music: false,
+  sfx: false,
   leaderboard: true,
 });
 

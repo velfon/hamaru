@@ -1,5 +1,5 @@
 /**
- * BGM の楽譜(docs/10)。音は鳴らせないので、楽譜の性質を検査する。
+ * BGM の楽譜と効果音(docs/10)。音は鳴らせないので、楽譜の性質を検査する。
  */
 import { describe, expect, it } from "vitest";
 import {
@@ -11,6 +11,7 @@ import {
   midiToFreq,
   type Note,
 } from "../../src/audio/score";
+import { sfxNotes, type SfxName, type SfxNote } from "../../src/audio/sfx";
 import { DEFAULT_CONFIG } from "../../src/config";
 
 const PENTATONIC = new Set([0, 2, 4, 7, 9]);
@@ -132,5 +133,87 @@ describe("config", () => {
     expect(DEFAULT_CONFIG.audio.bpm).toBeLessThanOrEqual(160);
     expect(DEFAULT_CONFIG.audio.volume).toBeGreaterThan(0);
     expect(DEFAULT_CONFIG.audio.volume).toBeLessThanOrEqual(0.6);
+  });
+});
+
+const ALL_SFX: SfxName[] = ["place", "clear", "boardClear", "levelClear", "gameOver"];
+const last = (notes: readonly SfxNote[]): number => Math.max(...notes.map((n) => n.at + n.dur), 0);
+
+describe("sfxNotes(docs/10 §6)", () => {
+  it("同じ入力からは同じ音(乱数を使わない)", () => {
+    for (const name of ALL_SFX) {
+      expect(sfxNotes(name, { lines: 2, streak: 1, cells: 3 })).toEqual(
+        sfxNotes(name, { lines: 2, streak: 1, cells: 3 }),
+      );
+    }
+  });
+
+  it("どの効果音もハ長調から外れない", () => {
+    for (const name of ALL_SFX) {
+      for (const streak of [0, 3, 99]) {
+        for (const note of sfxNotes(name, { lines: 3, streak, cells: 4 })) {
+          expect(DIATONIC.has(note.midi % 12)).toBe(true);
+        }
+      }
+    }
+  });
+
+  it("拍・長さ・音量が入れ物に収まっている", () => {
+    for (const name of ALL_SFX) {
+      const notes = sfxNotes(name, { lines: 4, streak: 2, cells: 5 });
+      expect(notes.length).toBeGreaterThan(0);
+      for (const n of notes) {
+        expect(n.at).toBeGreaterThanOrEqual(0);
+        expect(n.dur).toBeGreaterThan(0);
+        expect(n.gain).toBeGreaterThan(0);
+        expect(n.gain).toBeLessThanOrEqual(0.5);
+      }
+      // 余韻が長すぎると次の手に被る
+      expect(last(notes)).toBeLessThanOrEqual(2);
+    }
+  });
+
+  it("置く音は短く小さい(毎手鳴るので疲れさせない)", () => {
+    const notes = sfxNotes("place", { cells: 1 });
+    expect(notes).toHaveLength(1);
+    expect(last(notes)).toBeLessThanOrEqual(0.1);
+    expect(notes[0]?.gain).toBeLessThanOrEqual(0.25);
+    expect(notes[0]?.timbre).toBe("click");
+    // 大きいピースほど低い
+    const small = sfxNotes("place", { cells: 1 })[0]?.midi as number;
+    const big = sfxNotes("place", { cells: 9 })[0]?.midi as number;
+    expect(big).toBeLessThan(small);
+  });
+
+  it("消える音は行数で増え、連鎖で上がる(上限あり)", () => {
+    expect(sfxNotes("clear", { lines: 1 })).toHaveLength(1);
+    expect(sfxNotes("clear", { lines: 2 })).toHaveLength(2);
+    expect(sfxNotes("clear", { lines: 4 })).toHaveLength(3); // 3 音で打ち止め
+
+    const pitch = (streak: number) => sfxNotes("clear", { lines: 1, streak })[0]?.midi as number;
+    expect(pitch(1)).toBeGreaterThan(pitch(0));
+    expect(pitch(3)).toBeGreaterThan(pitch(1));
+    expect(pitch(99)).toBe(pitch(5)); // 上がりすぎない
+    // 分散和音は後の音ほど高い
+    const three = sfxNotes("clear", { lines: 3, streak: 0 });
+    expect(three.map((n) => n.midi)).toEqual([...three.map((n) => n.midi)].sort((a, b) => a - b));
+    expect(three.map((n) => n.at)).toEqual([...three.map((n) => n.at)].sort((a, b) => a - b));
+  });
+
+  it("欠けた入力でも鳴る(行数 0・負の連鎖・小数)", () => {
+    expect(sfxNotes("clear")).toHaveLength(1);
+    expect(sfxNotes("clear", { lines: 0, streak: -5 })).toHaveLength(1);
+    expect(sfxNotes("place", { cells: 2.7 })).toHaveLength(1);
+  });
+
+  it("全消し・レベルクリアは駆け上がって鐘が残る、ゲームオーバーは下がる", () => {
+    for (const name of ["boardClear", "levelClear"] as const) {
+      const notes = sfxNotes(name);
+      expect(notes.some((n) => n.timbre === "bell")).toBe(true);
+      const plucks = notes.filter((n) => n.timbre === "pluck").map((n) => n.midi);
+      expect(plucks).toEqual([...plucks].sort((a, b) => a - b));
+    }
+    const over = sfxNotes("gameOver").map((n) => n.midi);
+    expect(over).toEqual([...over].sort((a, b) => b - a));
   });
 });

@@ -42,7 +42,7 @@
   "input": { "touchLiftOffset": 70, "previewClears": true },
   "daily": { "epoch": "2026-10-01", "shareGaugeMax": 6000 },
   "fx": { "clearDurationMs": 320, "snapDurationMs": 120 },
-  "audio": { "bpm": 104, "volume": 0.32 },
+  "audio": { "bpm": 104, "volume": 0.32, "sfxVolume": 0.45 },
   "levels": {
     "goalBase": 3,
     "goalPerLevel": 0.25,

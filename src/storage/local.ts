@@ -180,6 +180,8 @@ export interface Settings {
   previewClears: boolean;
   /** BGM を鳴らす(docs/10)。既定は OFF(docs/00 §5)。 */
   music: boolean;
+  /** 効果音を鳴らす(docs/10 §6)。既定は OFF。 */
+  sfx: boolean;
   /** ランキングに参加する(デイリーの公式記録を送る)。docs/08 §3。 */
   leaderboard: boolean;
 }
@@ -191,6 +193,7 @@ export const DEFAULT_SETTINGS: Settings = {
   motion: "system",
   previewClears: true,
   music: false,
+  sfx: false,
   leaderboard: true,
 };
 
@@ -258,6 +261,7 @@ export function loadSettings(): Settings {
       motion: pickEnum(data["motion"], ["system", "always"] as const, DEFAULT_SETTINGS.motion),
       previewClears: pickBool(data["previewClears"], DEFAULT_SETTINGS.previewClears),
       music: pickBool(data["music"], DEFAULT_SETTINGS.music),
+      sfx: pickBool(data["sfx"], DEFAULT_SETTINGS.sfx),
       leaderboard: pickBool(data["leaderboard"], DEFAULT_SETTINGS.leaderboard),
     };
   });

@@ -76,6 +76,7 @@ const fxSchema = z.strictObject({
 const audioSchema = z.strictObject({
   bpm: z.number().min(60).max(160),
   volume: z.number().min(0).max(0.6),
+  sfxVolume: z.number().min(0).max(0.8),
 });
 
 /** レベルの難易度(docs/09 §2)。 */

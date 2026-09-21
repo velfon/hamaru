@@ -57,9 +57,11 @@ hamaru/
 │   │   ├── fx.ts              # 演出(吸着・金継ぎ消去・全消し)
 │   │   ├── share.ts
 │   │   └── components/{button,toast,dialog}.ts
-│   ├── audio/                 # BGM(10 参照)。音源ファイルは持たない
+│   ├── audio/                 # BGM と効果音(10 参照)。音源ファイルは持たない
 │   │   ├── score.ts           # ★ 純粋。小節ごとの音符を作る
-│   │   └── player.ts          # Web Audio で鳴らす(先読み予約)
+│   │   ├── sfx.ts             # 効果音(音符は純粋、鳴らす部分は Web Audio)
+│   │   ├── context.ts         # 共有 AudioContext(参照数で開閉)
+│   │   └── player.ts          # BGM を鳴らす(先読み予約)
 │   ├── telemetry/
 │   │   ├── client.ts          # キュー・バッチ・sendBeacon
 │   │   ├── events.ts          # イベント型(04 と 1:1)
@@ -185,7 +187,7 @@ export function fillRatio(board: Board): number;
   "input": { "touchLiftOffset": 70, "previewClears": true },
   "daily": { "epoch": "2026-10-01", "shareGaugeMax": 6000 },
   "fx": { "clearDurationMs": 320, "snapDurationMs": 120 },
-  "audio": { "bpm": 104, "volume": 0.32 },
+  "audio": { "bpm": 104, "volume": 0.32, "sfxVolume": 0.45 },
   "levels": { "goalBase": 3, "...": 0 }
 }
 ```
