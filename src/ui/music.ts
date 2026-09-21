@@ -2,11 +2,11 @@
  * BGM の切り替え(docs/10 §4)。ゲーム画面のヘッダに音符ボタンを置き、設定 `music` と同期する。
  *
  * 既定は OFF(docs/00 §5)。設定画面まで行かなくても 1 タップで試せるように、
- * 遊んでいる画面にボタンを出す。プレイヤは ON にした時に初めて作る(OFF のままなら
- * AudioContext を作らない)。
+ * 遊んでいる画面にボタンを出す。音を出す部分は **ON にした時に初めて読み込む**
+ * (`import()`)。OFF のままなら初回 JS にも AudioContext にも一切費用がかからない。
  */
 import type { ResolvedConfig } from "../core/types";
-import { createMusicPlayer, type MusicPlayer } from "../audio/player";
+import type { MusicPlayer } from "../audio/player";
 import { t } from "../i18n";
 import { el, svg } from "./dom";
 import { langStore, settingsStore } from "./store";
@@ -29,6 +29,9 @@ export interface MusicControl {
 
 export function createMusicControl(config: ResolvedConfig): MusicControl {
   let player: MusicPlayer | null = null;
+  /** 読み込みの途中で OFF に戻されたら鳴らさない。 */
+  let wanted = false;
+  let destroyed = false;
 
   const button = el("button", { type: "button", class: "iconbtn", "data-testid": "music" });
   button.addEventListener("click", () => {
@@ -46,12 +49,20 @@ export function createMusicControl(config: ResolvedConfig): MusicControl {
 
   function apply(on: boolean): void {
     render(on);
-    if (on) {
-      player ??= createMusicPlayer({ bpm: config.audio.bpm, volume: config.audio.volume });
-      player?.start();
-    } else {
+    wanted = on;
+    if (!on) {
       player?.stop();
+      return;
     }
+    if (player !== null) {
+      player.start();
+      return;
+    }
+    void import("../audio/player").then(({ createMusicPlayer }) => {
+      if (destroyed) return;
+      player ??= createMusicPlayer({ bpm: config.audio.bpm, volume: config.audio.volume });
+      if (wanted) player?.start();
+    });
   }
 
   const unsubscribe = settingsStore.subscribe((s) => apply(s.music));
@@ -61,6 +72,8 @@ export function createMusicControl(config: ResolvedConfig): MusicControl {
   return {
     button,
     destroy() {
+      destroyed = true;
+      wanted = false;
       unsubscribe();
       unsubscribeLang();
       player?.dispose();
