@@ -136,7 +136,7 @@ describe("config", () => {
   });
 });
 
-const ALL_SFX: SfxName[] = ["place", "clear", "boardClear", "levelClear", "gameOver"];
+const ALL_SFX: SfxName[] = ["place", "clear", "boardClear", "levelClear", "gameOver", "confirm"];
 const last = (notes: readonly SfxNote[]): number => Math.max(...notes.map((n) => n.at + n.dur), 0);
 
 describe("sfxNotes(docs/10 §6)", () => {
@@ -204,6 +204,14 @@ describe("sfxNotes(docs/10 §6)", () => {
     expect(sfxNotes("clear")).toHaveLength(1);
     expect(sfxNotes("clear", { lines: 0, streak: -5 })).toHaveLength(1);
     expect(sfxNotes("place", { cells: 2.7 })).toHaveLength(1);
+  });
+
+  it("ON にした合図は短い 2 音(ホームで音量の当たりを付ける)", () => {
+    const notes = sfxNotes("confirm");
+    expect(notes).toHaveLength(2);
+    expect(last(notes)).toBeLessThanOrEqual(0.6);
+    expect(notes.every((n) => n.timbre === "pluck")).toBe(true);
+    expect(notes[1]?.midi).toBeGreaterThan(notes[0]?.midi as number);
   });
 
   it("全消し・レベルクリアは駆け上がって鐘が残る、ゲームオーバーは下がる", () => {
