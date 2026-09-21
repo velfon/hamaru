@@ -138,8 +138,10 @@ export interface DailyConfig {
 export interface AudioConfig {
   /** テンポ(1 分あたりの拍)。 */
   readonly bpm: number;
-  /** 全体の音量 0〜1。 */
+  /** BGM の音量 0〜1。 */
   readonly volume: number;
+  /** 効果音の音量 0〜1。 */
+  readonly sfxVolume: number;
 }
 
 export interface FxConfig {

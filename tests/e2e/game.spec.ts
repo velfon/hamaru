@@ -180,3 +180,77 @@ test("消去プレビュー: 置くと消える行が下塗りされる(docs/01 
   await drop();
   await expect(page.locator('[data-preview="1"]')).toHaveCount(0);
 });
+
+test("効果音: 置いた時と消えた時に音が出る(docs/10 §6)", async ({ page }) => {
+  // 音そのものは聞けないので、Web Audio のノードが作られた数を数える。
+  // BGM は OFF にしておく(鳴っていると数が増え続けて効果音と区別できない)。
+  await page.addInitScript(() => {
+    localStorage.setItem(
+      "hamaru:v1:settings",
+      JSON.stringify({
+        schemaVersion: 1,
+        data: {
+          lang: "auto",
+          theme: "auto",
+          haptics: true,
+          motion: "system",
+          previewClears: true,
+          music: false,
+          sfx: true,
+          leaderboard: false,
+        },
+      }),
+    );
+    const w = window as unknown as { __nodes?: number; __ctx?: AudioContext };
+    w.__nodes = 0;
+    const proto = AudioContext.prototype;
+    const osc = proto.createOscillator;
+    const buf = proto.createBufferSource;
+    proto.createOscillator = function (this: AudioContext) {
+      w.__nodes = (w.__nodes ?? 0) + 1;
+      w.__ctx = this;
+      return osc.call(this);
+    };
+    proto.createBufferSource = function (this: AudioContext) {
+      w.__nodes = (w.__nodes ?? 0) + 1;
+      w.__ctx = this;
+      return buf.call(this);
+    };
+  });
+
+  const nodes = (): Promise<number> =>
+    page.evaluate(() => (window as unknown as { __nodes?: number }).__nodes ?? 0);
+  const reset = (): Promise<void> =>
+    page.evaluate(() => {
+      (window as unknown as { __nodes: number }).__nodes = 0;
+    });
+
+  // (9,9) に 1 マス置くと「行 + 列」の 2 本が消える盤。(0,0) の 1 マスで全消しにはしない
+  // (全消しは別の音なので、消える音そのものを見たい)。
+  const board = almostFullRow();
+  for (let y = 0; y < 9; y++) board[y * 10 + 9] = 2;
+  const dot = { shapeId: "dot" };
+  await gotoState(page, makeState({ board, tray: [dot, dot, dot] }), "/play");
+  await waitForBoardLayout(page);
+  await expect(page.getByTestId("sound")).toHaveAttribute("aria-pressed", "true");
+
+  // 1 手目は「最初の操作」。ブラウザはここで初めて音を許すので、鳴らずに終わってよい。
+  await dragPiece(page, 0, 0, 5);
+  await expect
+    .poll(() =>
+      page.evaluate(() => (window as unknown as { __ctx?: AudioContext }).__ctx?.state ?? null),
+    )
+    .toBe("running");
+
+  // 消えない場所に置く → 置く音(短い単発)
+  await reset();
+  await dragPiece(page, 1, 2, 5);
+  await expect.poll(nodes).toBeGreaterThan(0);
+  const place = await nodes();
+
+  // 行と列が同時に消える → 消える音は 2 音。置く音より音数が多い
+  await reset();
+  await dragPiece(page, 2, 9, 9);
+  await expect(page.locator("#c-9-9")).toHaveAttribute("data-c", "0");
+  await expect.poll(nodes).toBeGreaterThan(place);
+});

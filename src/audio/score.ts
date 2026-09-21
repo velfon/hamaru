@@ -46,7 +46,7 @@ const PROGRESSION = [
  * 旋律の音域。ハ長調のペンタトニック(ド レ ミ ソ ラ)を MIDI 72 = C5 から 1.5 オクターブ。
  * 半音がないのでどの音が来ても和音とぶつからない。狭くして跳ね回らせない。
  */
-const LADDER: readonly number[] = [72, 74, 76, 79, 81, 84, 86, 88];
+export const LADDER: readonly number[] = [72, 74, 76, 79, 81, 84, 86, 88];
 
 /** 8 分音符 8 個ぶんのリズム型。1 = 音を出す。 */
 const RHYTHMS: ReadonlyArray<readonly number[]> = [

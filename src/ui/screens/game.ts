@@ -24,7 +24,7 @@ import {
 import { track, updateContext } from "../../telemetry/client";
 import { createBoardView } from "../board-view";
 import { button, iconButton, ICON_BACK } from "../components/button";
-import { createMusicControl } from "../music";
+import { createSoundControl } from "../sound";
 import { announce, toast } from "../components/toast";
 import { createDrag, type PlacementHost, type PlacementPreview } from "../drag";
 import { submitDaily, type Result, type SubmitJson } from "../leaderboard-api";
@@ -244,7 +244,7 @@ export function gameScreen(mode: Mode) {
       onClick: () => navigate("/"),
     });
 
-    const music = createMusicControl(config);
+    const sound = createSoundControl(config);
 
     const modeTag = el("div", { class: "modetag", "data-testid": "modetag" }, [
       mode === "daily"
@@ -256,7 +256,7 @@ export function gameScreen(mode: Mode) {
     // ヘッダはワイヤ(docs/01 §9.2)どおり 1 行。← / スコア / ベスト / モードとストリーク。
     const hud = el("div", { class: "hud" }, [
       back,
-      music.button,
+      sound.button,
       el("div", { class: "hud__scores" }, [
         el("div", { class: "stat stat--score" }, [
           el("span", { class: "stat__label" }, [t("game.score")]),
@@ -356,6 +356,7 @@ export function gameScreen(mode: Mode) {
         dropFx(boardView, placedOutside, delta, fx);
 
         const haptics = settingsStore.get().haptics;
+        const cleared = result.clearedRows.length + result.clearedCols.length;
         if (result.clearedCells.length > 0) {
           const tiles = result.clearedCells.map(([cx, cy]) => ({
             x: cx,
@@ -364,12 +365,16 @@ export function gameScreen(mode: Mode) {
           }));
           clearFx(boardView, tiles, result.clearedRows, result.clearedCols, fx);
           vibrate([10, 30, 20], haptics);
+          // 連鎖が続くほど高くなる(docs/10 §6)。state はもう次の状態なので streak は加算済み。
+          sound.play("clear", { lines: cleared, streak: state.streak - 1 });
         } else {
           vibrate(10, haptics);
+          sound.play("place", { cells: shape.cells.length });
         }
 
         if (result.boardCleared) {
           boardClearFx(boardView, t("fx.boardClear", { n: config.scoring.boardClearBonus }), fx);
+          sound.play("boardClear");
         }
 
         const lines = result.clearedRows.length + result.clearedCols.length;
@@ -469,6 +474,7 @@ export function gameScreen(mode: Mode) {
       });
 
       if (reason !== "over") return;
+      sound.play("gameOver");
       // 送信は演出と並行して始める(docs/08 §7)。
       const submission =
         mode === "daily" && !isPractice && settingsStore.get().leaderboard ? submitResult() : null;
@@ -671,7 +677,7 @@ export function gameScreen(mode: Mode) {
         updateContext({ mode: "" });
         document.removeEventListener("visibilitychange", onVisibility);
         unsubscribeLang();
-        music.destroy();
+        sound.destroy();
         drag.destroy();
         keyboard.destroy();
         overlay?.remove();

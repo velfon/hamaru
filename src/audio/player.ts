@@ -2,9 +2,10 @@
  * BGM の再生(docs/10 §3)。Web Audio API だけを使い、音源ファイルは持たない。
  *
  * `score.ts` が作る音符を、25 ms ごとに 0.3 秒先まで予約する(setInterval では鳴らさない。
- * 鳴らすのは AudioContext の時計)。ブラウザは操作前に音を出せないので、`start()` は
- * 最初の操作より前に呼ばれても失敗せず、次の `pointerdown` で鳴り始める。
+ * 鳴らすのは AudioContext の時計)。AudioContext は効果音と共有する(`context.ts`)。
+ * ブラウザは操作前に音を出せないので、止まっている間は時計を進めず、無音の小節を飛ばさない。
  */
+import { acquireAudio, releaseAudio, resumeAudio } from "./context";
 import { barNotes, barSeconds, barsToSchedule, midiToFreq, type Note } from "./score";
 
 export interface MusicPlayer {
@@ -28,20 +29,8 @@ const TICK_MS = 25;
 const FADE_IN_SEC = 0.8;
 const FADE_OUT_SEC = 0.35;
 
-type Ctor = new () => AudioContext;
-
-function audioContextCtor(): Ctor | null {
-  if (typeof window === "undefined") return null;
-  const w = window as unknown as { AudioContext?: Ctor; webkitAudioContext?: Ctor };
-  return w.AudioContext ?? w.webkitAudioContext ?? null;
-}
-
 /** 環境が Web Audio に対応していなければ null(呼び出し側は無視してよい)。 */
 export function createMusicPlayer(opts: MusicOptions): MusicPlayer | null {
-  const found = audioContextCtor();
-  if (found === null) return null;
-  const Ctx: Ctor = found;
-
   const beatSec = 60 / opts.bpm;
   const barSec = barSeconds(opts.bpm);
 
@@ -57,30 +46,29 @@ export function createMusicPlayer(opts: MusicOptions): MusicPlayer | null {
 
   function build(): boolean {
     if (ctx !== null) return true;
-    try {
-      ctx = new Ctx();
-    } catch {
-      return false; // 端末が作らせない(古い iOS など)
-    }
+    const c = acquireAudio();
+    if (c === null) return false;
+    ctx = c;
+
     // 出口: 音量 → 少し丸める低域通過 → スピーカー。耳に刺さらないようにする。
-    const out = ctx.createBiquadFilter();
+    const out = c.createBiquadFilter();
     out.type = "lowpass";
     out.frequency.value = 6000;
     out.Q.value = 0.7;
-    out.connect(ctx.destination);
+    out.connect(c.destination);
 
-    master = ctx.createGain();
+    master = c.createGain();
     master.gain.value = 0;
     master.connect(out);
 
     // 旋律だけ付点 8 分のディレイに送る(きらめき)。
-    const delay = ctx.createDelay(1);
+    const delay = c.createDelay(1);
     delay.delayTime.value = beatSec * 0.75;
-    const feedback = ctx.createGain();
+    const feedback = c.createGain();
     feedback.gain.value = 0.25;
-    const send = ctx.createGain();
+    const send = c.createGain();
     send.gain.value = 0.16;
-    leadBus = ctx.createGain();
+    leadBus = c.createGain();
     leadBus.gain.value = 1;
     leadBus.connect(master);
     leadBus.connect(delay);
@@ -90,8 +78,8 @@ export function createMusicPlayer(opts: MusicOptions): MusicPlayer | null {
     send.connect(master);
 
     // シェイカー用の白色雑音(0.2 秒を使い回す)。
-    const frames = Math.floor(ctx.sampleRate * 0.2);
-    noise = ctx.createBuffer(1, frames, ctx.sampleRate);
+    const frames = Math.floor(c.sampleRate * 0.2);
+    noise = c.createBuffer(1, frames, c.sampleRate);
     const data = noise.getChannelData(0);
     let seed = 1;
     for (let i = 0; i < frames; i++) {
@@ -186,7 +174,11 @@ export function createMusicPlayer(opts: MusicOptions): MusicPlayer | null {
 
   function tick(): void {
     if (ctx === null || !playing) return;
-    if (ctx.state !== "running") return; // 操作待ち。時計は進めない
+    if (ctx.state !== "running") {
+      // 操作待ち・タブが隠れている間は時計を進めない(無音の小節を飛ばさない)。
+      origin = ctx.currentTime - bar * barSec;
+      return;
+    }
     const elapsed = ctx.currentTime - origin;
     for (const b of barsToSchedule(elapsed, barSec, bar, LOOKAHEAD_SEC)) {
       const barStart = origin + b * barSec;
@@ -194,28 +186,6 @@ export function createMusicPlayer(opts: MusicOptions): MusicPlayer | null {
       bar = b + 1;
     }
   }
-
-  function resume(): void {
-    if (ctx === null || ctx.state === "running") return;
-    void ctx.resume().then(
-      () => {
-        // 操作待ちで止まっていた間は時計を進めない(無音の小節を飛ばさない)。
-        if (ctx !== null) origin = ctx.currentTime - bar * barSec;
-      },
-      () => {
-        /* まだ操作がない。次の pointerdown で再挑戦する */
-      },
-    );
-  }
-
-  const onGesture = (): void => {
-    if (playing) resume();
-  };
-  const onVisibility = (): void => {
-    if (ctx === null) return;
-    if (document.visibilityState === "hidden") void ctx.suspend().catch(() => {});
-    else if (playing) resume();
-  };
 
   return {
     get playing() {
@@ -231,17 +201,13 @@ export function createMusicPlayer(opts: MusicOptions): MusicPlayer | null {
       g.cancelScheduledValues(c.currentTime);
       g.setValueAtTime(Math.max(0.0001, g.value), c.currentTime);
       g.linearRampToValueAtTime(opts.volume, c.currentTime + FADE_IN_SEC);
-      resume();
-      document.addEventListener("pointerdown", onGesture);
-      document.addEventListener("visibilitychange", onVisibility);
+      resumeAudio();
       timer = setInterval(tick, TICK_MS);
       tick();
     },
     stop() {
       if (!playing) return;
       playing = false;
-      document.removeEventListener("pointerdown", onGesture);
-      document.removeEventListener("visibilitychange", onVisibility);
       if (timer !== null) clearInterval(timer);
       timer = null;
       if (ctx === null || master === null) return;
@@ -249,24 +215,17 @@ export function createMusicPlayer(opts: MusicOptions): MusicPlayer | null {
       master.gain.cancelScheduledValues(now);
       master.gain.setValueAtTime(Math.max(0.0001, master.gain.value), now);
       master.gain.exponentialRampToValueAtTime(0.0001, now + FADE_OUT_SEC);
-      // 予約済みの音が鳴り終わってから止める(次の start は同じ小節から続く)。
-      const c = ctx;
-      setTimeout(
-        () => {
-          if (!playing && c.state === "running") void c.suspend().catch(() => {});
-        },
-        (FADE_OUT_SEC + LOOKAHEAD_SEC) * 1000,
-      );
     },
     dispose() {
       this.stop();
+      if (disposed) return;
       disposed = true;
-      const c = ctx;
+      const had = ctx !== null;
       ctx = null;
       master = null;
       leadBus = null;
       noise = null;
-      if (c !== null) void c.close().catch(() => {});
+      if (had) releaseAudio();
     },
   };
 }

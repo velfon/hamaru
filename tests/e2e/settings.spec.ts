@@ -53,7 +53,7 @@ test("消去プレビューを OFF にするとハイライトが出ない", asy
   await drop();
 });
 
-test("BGM は既定 OFF。ゲーム画面のボタンで ON にでき、設定と同期する(docs/10 §4)", async ({
+test("音は既定 OFF。ゲーム画面のボタンで BGM と効果音をまとめて入切できる(docs/10 §4)", async ({
   page,
 }) => {
   // 音が出ているかは自動では確かめられないので、AudioContext が作られて走り出すことまでを見る。
@@ -70,24 +70,32 @@ test("BGM は既定 OFF。ゲーム画面のボタンで ON にでき、設定�
   });
 
   await page.goto("/#/play");
-  const music = page.getByTestId("music");
-  await expect(music).toHaveAttribute("aria-pressed", "false");
+  const sound = page.getByTestId("sound");
+  await expect(sound).toHaveAttribute("aria-pressed", "false");
   expect(await page.evaluate(() => "__ctx" in window)).toBe(false); // OFF のうちは作らない
 
-  await music.click();
-  await expect(music).toHaveAttribute("aria-pressed", "true");
+  await sound.click();
+  await expect(sound).toHaveAttribute("aria-pressed", "true");
   await expect
     .poll(() =>
       page.evaluate(() => (window as unknown as { __ctx?: AudioContext }).__ctx?.state ?? null),
     )
     .toBe("running");
 
+  // ボタンは BGM と効果音をまとめて入切する
   await page.goto("/#/settings");
   await expect(page.getByTestId("setting-music")).toBeChecked();
-  await page.getByTestId("setting-music").uncheck();
+  await expect(page.getByTestId("setting-sfx")).toBeChecked();
 
+  // 片方だけ ON も選べる。そのときボタンは「鳴っている」側
+  await page.getByTestId("setting-music").uncheck();
   await page.goto("/#/play");
-  await expect(page.getByTestId("music")).toHaveAttribute("aria-pressed", "false");
+  await expect(page.getByTestId("sound")).toHaveAttribute("aria-pressed", "true");
+
+  await page.getByTestId("sound").click(); // まとめて OFF
+  await page.goto("/#/settings");
+  await expect(page.getByTestId("setting-music")).not.toBeChecked();
+  await expect(page.getByTestId("setting-sfx")).not.toBeChecked();
 });
 
 test("データを削除すると統計が 0 に戻る", async ({ page }) => {

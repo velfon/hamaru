@@ -36,7 +36,7 @@ import { createDrag, type PlacementHost, type PlacementPreview } from "../drag";
 import { el, systemPrefersReducedMotion } from "../dom";
 import { boardClearFx, clearFx, dropFx, gameOverDelay, renderNumber, vibrate } from "../fx";
 import { createKeyboard } from "../keyboard";
-import { createMusicControl } from "../music";
+import { createSoundControl } from "../sound";
 import { navigate, type Screen } from "../router";
 import { langStore, settingsStore } from "../store";
 import { createTrayView } from "../tray-view";
@@ -136,7 +136,7 @@ export function levelScreen(container: HTMLElement, query: URLSearchParams): Scr
   const goalValue = el("div", { class: "stat__value", "data-testid": "goal" });
   const traysValue = el("div", { class: "stat__value", "data-testid": "trays" });
 
-  const music = createMusicControl(config);
+  const sound = createSoundControl(config);
 
   const hud = el("div", { class: "hud" }, [
     iconButton({
@@ -145,7 +145,7 @@ export function levelScreen(container: HTMLElement, query: URLSearchParams): Scr
       testId: "back",
       onClick: () => navigate("/levels"),
     }),
-    music.button,
+    sound.button,
     el("div", { class: "hud__scores" }, [
       el("div", { class: "stat stat--score" }, [
         el("span", { class: "stat__label" }, [t("game.score")]),
@@ -225,6 +225,7 @@ export function levelScreen(container: HTMLElement, query: URLSearchParams): Scr
         fx,
       );
       const haptics = settingsStore.get().haptics;
+      const lines = result.clearedRows.length + result.clearedCols.length;
       if (result.clearedCells.length > 0) {
         const tiles = result.clearedCells.map(([cx, cy]) => ({
           x: cx,
@@ -233,12 +234,16 @@ export function levelScreen(container: HTMLElement, query: URLSearchParams): Scr
         }));
         clearFx(boardView, tiles, result.clearedRows, result.clearedCols, fx);
         vibrate([10, 30, 20], haptics);
+        // クリアの音は finish で鳴らす(重ならないように)
+        if (result.levelCleared !== true) sound.play("clear", { lines, streak: state.streak - 1 });
       } else {
         vibrate(10, haptics);
+        sound.play("place", { cells: shape.cells.length });
       }
-      if (result.boardCleared)
+      if (result.boardCleared) {
         boardClearFx(boardView, t("fx.boardClear", { n: config.scoring.boardClearBonus }), fx);
-      const lines = result.clearedRows.length + result.clearedCols.length;
+        sound.play("boardClear");
+      }
       announce(
         lines > 0
           ? t("a11y.placed", { points: result.scoreDelta, lines })
@@ -274,6 +279,7 @@ export function levelScreen(container: HTMLElement, query: URLSearchParams): Scr
     tick();
     remove(KEYS.gameLevel);
     const stars = starsFor(state, config.levels);
+    sound.play(reason === "clear" ? "levelClear" : "gameOver");
     if (reason === "clear" && stars > 0) {
       saveLevelResult(no, { stars: stars as 1 | 2 | 3, score: state.score });
     }
@@ -395,7 +401,7 @@ export function levelScreen(container: HTMLElement, query: URLSearchParams): Scr
       updateContext({ mode: "" });
       document.removeEventListener("visibilitychange", onVisibility);
       unsubscribeLang();
-      music.destroy();
+      sound.destroy();
       drag.destroy();
       keyboard.destroy();
       overlay?.remove();
