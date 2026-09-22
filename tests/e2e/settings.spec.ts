@@ -147,4 +147,10 @@ test("プライバシー画面に送信内容が書いてある(docs/04 §8)", a
   await expect(page.getByTestId("about-screen")).toBeVisible();
   await expect(page.getByTestId("about-screen")).toContainText("Global Privacy Control");
   await expect(page.getByTestId("about-screen")).toContainText("IP");
+  // 1 枚ものの「このゲームについて」(docs/01 §9.6)。節が並び、末尾にライセンスと戻り口がある
+  const about = page.getByTestId("about-screen");
+  await expect(about.locator(".about__eyebrow")).toHaveCount(6);
+  await expect(about).toContainText("MIT");
+  await expect(about).toContainText("lovenf.org");
+  await expect(about.getByTestId("about-home")).toHaveAttribute("href", "#/");
 });

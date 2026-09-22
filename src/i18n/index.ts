@@ -2,6 +2,8 @@
  * i18n(docs/01 §12、docs/03 §7)。
  *
  * - キーはドット区切り。文言の追加は **ja / en 同時**(`npm run i18n:check` が差分で落ちる)。
+ * - 長い文章(`about.*`)は初回 JS に載せず、その画面が開いた時に読み込んで `addMessages` で足す
+ *   (docs/02 §11 N-15)。
  * - 自動判定は `navigator.languages` の先頭が `ja*` なら ja、それ以外 en。
  * - 数値は `Intl.NumberFormat`、日付は `Intl.DateTimeFormat`。
  */
@@ -11,6 +13,11 @@ import ja from "./ja.json";
 export type Lang = "ja" | "en";
 
 export const MESSAGES: Record<Lang, Record<string, string>> = { ja, en };
+
+/** 後から読み込んだ文言を足す(画面ごとの遅延読み込み)。同じキーは上書きする。 */
+export function addMessages(lang: Lang, extra: Record<string, string>): void {
+  Object.assign(MESSAGES[lang], extra);
+}
 
 export type MessageKey = keyof typeof ja;
 
