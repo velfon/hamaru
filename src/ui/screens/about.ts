@@ -4,8 +4,11 @@
  * 版面は「窯に並べたタイル」。節の頭に釉薬の色見本(チップ)を 1 枚置き、
  * 節の区切り線には金継ぎの継ぎ目を短く走らせる(docs/03 §10 N-8)。
  * 「何を送っているか」は平易に、謝らずに書く。
+ *
+ * 文章が長いので、**この画面の文言は初回 JS に載せず**、開いた時に読み込む
+ * (docs/02 §11 N-15)。読み込みが終わるまでは枠だけを出す。
  */
-import { t } from "../../i18n";
+import { addMessages, getLang, t } from "../../i18n";
 import { iconButton, ICON_BACK } from "../components/button";
 import { el } from "../dom";
 import { navigate, type Screen } from "../router";
@@ -30,7 +33,7 @@ function entry(nameKey: string, textKey: string): HTMLElement {
   return el("li", {}, [el("b", {}, [t(nameKey)]), " — ", t(textKey)]);
 }
 
-export function aboutScreen(container: HTMLElement): Screen {
+function render(container: HTMLElement): void {
   const sections: Section[] = [
     {
       glaze: 2,
@@ -129,11 +132,31 @@ export function aboutScreen(container: HTMLElement): Screen {
     ]),
   ]);
 
-  container.appendChild(screen);
+  container.replaceChildren(screen);
+}
+
+export function aboutScreen(container: HTMLElement): Screen {
+  let unmounted = false;
+  // 文言が届くまでは空の画面(戻るだけは効く)。ほぼ一瞬で入れ替わる。
+  container.appendChild(el("div", { class: "screen about", "data-testid": "about-screen" }));
+  // 表示中の言語のぶんだけ読む(言語を変えると画面を作り直すので、その時に読み直す)。
+  const lang = getLang();
+  const loading =
+    lang === "ja" ? import("../../i18n/about.ja.json") : import("../../i18n/about.en.json");
+  void loading.then(
+    (file) => {
+      if (unmounted) return;
+      addMessages(lang, file.default);
+      render(container);
+    },
+    () => {
+      /* 版の入れ替え直後など。開き直せば読み込み直す */
+    },
+  );
 
   return {
     unmount() {
-      /* 何も購読していない */
+      unmounted = true;
     },
   };
 }

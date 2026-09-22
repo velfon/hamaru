@@ -33,8 +33,16 @@ function placeholders(s: string): string[] {
   return [...s.matchAll(/\{(\w+)\}/g)].map((m) => m[1] ?? "").sort();
 }
 
-const ja = load("ja");
-const en = load("en");
+// 画面ごとに遅延読み込みする文言も同じ規則で検査する(docs/02 §11 N-15)。
+const FILES = ["", "about."] as const;
+const ja = Object.assign({}, ...FILES.map((prefix) => load(`${prefix}ja`))) as Record<
+  string,
+  string
+>;
+const en = Object.assign({}, ...FILES.map((prefix) => load(`${prefix}en`))) as Record<
+  string,
+  string
+>;
 const errors: string[] = [];
 
 for (const key of Object.keys(ja)) {

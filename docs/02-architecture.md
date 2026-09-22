@@ -423,6 +423,17 @@ LCP 要素は JS が描く文字で、内訳の 73 % が描画待ち(JS のダ�
 `deploy` を `validate:config && VITE_APP_VERSION=$GIT_SHA vite build && wrangler deploy --var APP_VERSION:$GIT_SHA` に直し、
 `tests/unit/scripts-contract.test.ts` でこの順序と版の注入を固定した。PR プレビューも `VITE_APP_VERSION=pr-<n>-<sha>` でビルドする。
 
+### N-15. 長い文章は初回 JS に載せない(§9 の予算、2026-09-22)
+「このゲームについて」(docs/01 §9.6)を書いたら、文言だけで gzip 1.8 KB 増え、
+Lighthouse の LCP が 1507〜1533 ms(予算 1500 ms)になって budget が落ちた。
+
+- `about.*` のキーを `src/i18n/about.{ja,en}.json` に分け、**その画面を開いた時に、表示中の言語のぶんだけ**
+  読み込む(`addMessages`)。初回 JS は 30.56 KB(About を直に入れると 32.9 KB)
+- 読み込みが終わるまでは空の枠を出す。戻るボタンは枠にも効く
+- `npm run i18n:check` は分割したファイルも合わせて検査する(両言語同時の約束は変わらない)
+
+この形は、これから画面ごとに文章が増えても使える。**文章の量で初回表示を遅くしない**。
+
 ### N-14. 新しい版をすぐ届ける(`skipWaiting`)(§1 PWA、2026-09-21)
 `registerType: "autoUpdate"` + `injectRegister: "script-defer"` の組み合わせだと、生成される SW は
 **`SKIP_WAITING` メッセージを受け取ったときだけ** `self.skipWaiting()` を呼ぶ。だが script-defer で
