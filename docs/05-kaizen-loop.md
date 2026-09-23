@@ -119,6 +119,11 @@ safe-auto  (触ったパス: src/config/experiments.json, kaizen/**)
 3. `safe-auto`(または条件を満たす `core-guarded`)かつ `vars.KAIZEN_AUTOMERGE == 'true'` → `gh pr merge --squash --auto`。
 4. それ以外 → `needs-human` ラベル + Issue `kaizen: review needed` にリンク追記。
 
+承認ラベル(`golden: update` / `sim-baseline: update` / `kaizen`)は `change-class` が
+**実行開始時のイベント payload** から読む。そのため CI は `pull_request` の
+`labeled` / `unlabeled` でも走らせる(2026-09-24)。これが無いと、ラベルを付けても
+既存の実行を再実行するだけでは拾えず、承認が成立しない。
+
 前提(人間が設定): `main` のブランチ保護で「必須チェック = ci の全ジョブ」「auto-merge 許可」「直接 push 禁止(管理者含む)」。
 
 ## 6. 実験の枠組み

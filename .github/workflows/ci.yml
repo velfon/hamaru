@@ -3,7 +3,12 @@
 name: CI
 
 on:
+  # ラベルでも走らせる。change-class の承認ラベル(「golden: update」など)は
+  # **実行開始時のイベント payload** から読むので、既定の
+  # opened/synchronize/reopened だけだと「ラベルを付けても再実行で拾えない」
+  # =ラベル承認が成立しない(2026-09-24)。
   pull_request:
+    types: [opened, synchronize, reopened, labeled, unlabeled]
   push:
     branches: [main]
   workflow_dispatch:
