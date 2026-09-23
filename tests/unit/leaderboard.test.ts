@@ -184,6 +184,36 @@ describe("POST /api/daily/submit", () => {
     });
   });
 
+  it("上限に達していたら、手順を再生する前に 429 で切る(CPU を使わせない)", async () => {
+    await db
+      .prepare(
+        `INSERT INTO daily_scores (date, player, score, lines, moves, submission_id, submitted_at, attempts)
+         VALUES (?1, ?2, 10, 1, 1, 'x', ?3, ?4)`,
+      )
+      .bind(TODAY, await sha256Hex(A), NOW, MAX_ATTEMPTS_PER_DAY)
+      .run();
+    // 再生すれば必ず 422 になる出鱈目な手。先に上限で切っていれば 429 が返る
+    const garbage: Move[] = Array.from({ length: 2000 }, () => [0, 0, 0] as Move);
+    const r = await submit(A, TODAY, garbage);
+    expect(r.status).toBe(429);
+    expect(r.body["error"]).toBe("too_many_attempts");
+  });
+
+  it("本文が大きすぎるときは読む前に 413(Content-Length)", async () => {
+    const request = new Request(`${ORIGIN}/api/daily/submit`, {
+      method: "POST",
+      headers: {
+        origin: ORIGIN,
+        "content-type": "application/json",
+        "content-length": String(64 * 1024),
+      },
+      body: JSON.stringify({ installId: A, date: TODAY, moves: [[0, 0, 0]], version: "t" }),
+    });
+    const res = await handleSubmit(request, env, NOW);
+    expect(res.status).toBe(413);
+    expect((await res.json()) as { error: string }).toEqual({ error: "too_large" });
+  });
+
   it("1 日の挑戦回数には上限がある", async () => {
     const g = play(A, TODAY, randomBot);
     await db

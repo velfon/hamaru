@@ -74,6 +74,12 @@ p {
   letter-spacing: 0.06em;
 }
 
+/* 下位の画面(設定・ランキングなど)の見出し。CSP から 'unsafe-inline' を外したので
+   style 属性は使わない(docs/02 §10)。 */
+.topbar__title--sub {
+  font-size: 20px;
+}
+
 .topbar__spacer {
   flex: 1;
 }

@@ -24,6 +24,13 @@ interface Section {
   body: Node[];
 }
 
+/** 釉薬の色見本。色は CSSOM で入れる(style 属性は CSP で止まる。docs/02 §10)。 */
+function chip(glaze: number): HTMLElement {
+  const node = el("span", { class: "about__chip" });
+  node.style.setProperty("--g", `var(--glaze-${glaze})`);
+  return node;
+}
+
 function paragraph(key: string): HTMLElement {
   return el("p", {}, [t(key)]);
 }
@@ -105,7 +112,7 @@ function render(container: HTMLElement): void {
         testId: "back",
         onClick: () => navigate("/settings"),
       }),
-      el("h1", { class: "topbar__title", style: "font-size:20px" }, [t("about.title")]),
+      el("h1", { class: "topbar__title topbar__title--sub" }, [t("about.title")]),
       el("div", { class: "topbar__spacer" }),
     ]),
     el("header", { class: "about__head" }, [
@@ -118,7 +125,7 @@ function render(container: HTMLElement): void {
       sections.map((section) =>
         el("section", { class: "about__section" }, [
           el("div", { class: "about__label" }, [
-            el("span", { class: "about__chip", style: `--g: var(--glaze-${section.glaze})` }),
+            chip(section.glaze),
             el("span", { class: "about__eyebrow" }, [section.eyebrow]),
           ]),
           el("h2", { class: "about__title" }, [section.title]),
