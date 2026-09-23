@@ -40,15 +40,15 @@ test("起動で session_start、ゲームで game_start → game_end が積ま�
     page,
     makeState({
       board: almostDead(),
-      tray: [{ shapeId: "dot" }, { shapeId: "sq2" }, { shapeId: "sq2" }],
+      piece: { cells: [[0, 0]], color: 2 },
+      heat: 2, // 次のかけらは 2 マス → 飛び飛びの空きには置けない = この 1 手で終わる
       score: 500,
       moves: 20,
-      round: 6,
       linesCleared: 4,
     }),
     "/play",
   );
-  await dragPiece(page, 0, 0, 0);
+  await dragPiece(page, 0, 0);
   await expect(page.getByTestId("gameover")).toBeVisible({ timeout: 10_000 });
 
   // game_end は即フラッシュされる(docs/02 §6)ので、Worker に届いた分だけを見る。
@@ -73,7 +73,7 @@ test("起動で session_start、ゲームで game_start → game_end が積ま�
 
 test("「はじめから」で途中のゲームを捨てると game_end(abandon)が積まれる", async ({ page }) => {
   // `?state=` は 1 回だけ効くので、ここで積んだ「途中のゲーム」が保存される。
-  await gotoState(page, makeState({ score: 120, moves: 12, round: 5 }), "/play");
+  await gotoState(page, makeState({ score: 120, moves: 12 }), "/play");
   await expect(page.getByTestId("score")).toHaveText("120");
   await page.goto("/");
   await page.getByTestId("endless-restart").click();
@@ -83,7 +83,7 @@ test("「はじめから」で途中のゲームを捨てると game_end(abandon
 });
 
 test("ゲームを離れても game_end は積まれない(離脱 = 一時停止)", async ({ page }) => {
-  await gotoState(page, makeState({ score: 120, moves: 12, round: 5 }), "/play");
+  await gotoState(page, makeState({ score: 120, moves: 12 }), "/play");
   // 画面内の「戻る」で離脱する(リロードしないのでキューは残る)。
   await page.getByTestId("back").click();
   await expect(page.getByTestId("home-screen")).toBeVisible();

@@ -19,7 +19,7 @@ export default defineConfig({
       manifest: {
         name: "HAMARU",
         short_name: "HAMARU",
-        description: "10×10 のブロックはめ込みパズル。",
+        description: "10×10 のパズル。次のかけらは盤から返ってくる。",
         lang: "ja",
         start_url: "/?r=pwa",
         scope: "/",

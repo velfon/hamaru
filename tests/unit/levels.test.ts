@@ -15,9 +15,8 @@ import {
   levelVariant,
   newLevelGame,
   starsFor,
-  traysLeft,
+  movesLeft,
 } from "../../src/core/levels";
-import { getShape } from "../../src/core/shapes";
 import { OBSTACLE, type GameState, type ResolvedConfig } from "../../src/core/types";
 import { resetBackend, saveLevelResult, totalStars, unlockedLevel } from "../../src/storage/local";
 
@@ -27,11 +26,11 @@ const repoRoot = fileURLToPath(new URL("../..", import.meta.url));
 
 describe("levelParams(docs/09 §2 の式)", () => {
   it("既定値の代表点", () => {
-    expect(levelParams(L, 1)).toEqual({ no: 1, goal: 3, trayLimit: 6, obstacles: 0 });
-    // goal = 3 + floor(10 × 0.25) = 5、1 列あたり max(1.1, 2.0 − 0.02 × 10) = 1.8 → ceil(9) = 9、欠片 floor(10 × 0.3) = 3
-    expect(levelParams(L, 11)).toEqual({ no: 11, goal: 5, trayLimit: 9, obstacles: 3 });
+    expect(levelParams(L, 1)).toEqual({ no: 1, goal: 3, moveLimit: 42, obstacles: 0 });
+    // goal = 3 + floor(10 × 0.25) = 5、1 本あたり 14 − 0.05 × 10 = 13.5 → ceil(67.5) = 68、欠片 floor(10 × 0.3) = 3
+    expect(levelParams(L, 11)).toEqual({ no: 11, goal: 5, moveLimit: 68, obstacles: 3 });
     // 上限に張り付く
-    expect(levelParams(L, 200)).toEqual({ no: 200, goal: 15, trayLimit: 17, obstacles: 18 });
+    expect(levelParams(L, 200)).toEqual({ no: 200, goal: 15, moveLimit: 105, obstacles: 18 });
   });
 
   it("レベルとともに目標と欠片は増え、1 列あたりのトレイは減る", () => {
@@ -71,7 +70,7 @@ describe("newLevelGame", () => {
       expect(a.level).toEqual({
         no: n,
         goal: levelParams(L, n).goal,
-        trayLimit: levelParams(L, n).trayLimit,
+        moveLimit: levelParams(L, n).moveLimit,
       });
     }
   });
@@ -96,55 +95,48 @@ describe("クリアとトレイ切れ(docs/09 §1)", () => {
   const base = newLevelGame(config, 1, 0, 0);
   const rowAlmost = Array.from({ length: 9 }, (_, x) => 90 + x); // 下段の 0〜8 列
 
-  it("目標に達した手でクリアになり、次のトレイは配らない", () => {
-    const s = withBoard(base, rowAlmost, {
-      linesCleared: 2,
-      tray: [{ shapeId: "dot" }, { shapeId: "h2" }, null],
-    });
-    const { state, result } = place(s, config, 0, 9, 9);
+  it("目標に達した手でクリアになる", () => {
+    const s = withBoard(base, rowAlmost, { linesCleared: 2 });
+    const { state, result } = place(s, config, 9, 9);
     expect(result.ok).toBe(true);
     expect(result.levelCleared).toBe(true);
     expect(state.status).toBe("cleared");
     expect(state.linesCleared).toBe(3);
     // それ以上は置けない
-    expect(place(state, config, 1, 0, 0).result.ok).toBe(false);
+    expect(place(state, config, 0, 0).result.ok).toBe(false);
   });
 
-  it("最後のトレイの最後の 1 手で届けばクリア(トレイ切れより優先)", () => {
-    const s = withBoard(base, rowAlmost, {
-      linesCleared: 2,
-      round: base.level?.trayLimit ?? 6,
-      tray: [{ shapeId: "dot" }, null, null],
-    });
-    const { state, result } = place(s, config, 0, 9, 9);
+  it("最後の 1 手で届けばクリア(手数切れより優先)", () => {
+    const limit = base.level?.moveLimit ?? 42;
+    const s = withBoard(base, rowAlmost, { linesCleared: 2, moves: limit - 1 });
+    const { state, result } = place(s, config, 9, 9);
     expect(result.levelCleared).toBe(true);
-    expect(result.outOfTrays).toBe(false);
+    expect(result.outOfMoves).toBe(false);
     expect(state.status).toBe("cleared");
   });
 
-  it("最後のトレイを置き終えて届かなければトレイ切れで失敗", () => {
-    const limit = base.level?.trayLimit ?? 6;
-    const s = withBoard(base, [], { round: limit, tray: [{ shapeId: "dot" }, null, null] });
-    const { state, result } = place(s, config, 0, 0, 0);
-    expect(result.outOfTrays).toBe(true);
+  it("手数を使い切って届かなければ失敗", () => {
+    const limit = base.level?.moveLimit ?? 42;
+    const s = withBoard(base, [], { moves: limit - 1 });
+    const { state, result } = place(s, config, 0, 0);
+    expect(result.outOfMoves).toBe(true);
     expect(result.gameOver).toBe(true);
     expect(state.status).toBe("over");
-    expect(state.tray.every((p) => p === null)).toBe(true);
-    expect(traysLeft(state)).toBe(1);
+    expect(movesLeft(state)).toBe(0);
   });
 
-  it("トレイが残っていれば次のトレイを配る", () => {
-    const s = withBoard(base, [], { round: 1, tray: [{ shapeId: "dot" }, null, null] });
-    const { state, result } = place(s, config, 0, 0, 0);
-    expect(result.newTray).toBe(true);
-    expect(state.round).toBe(2);
-    expect(traysLeft(state)).toBe((base.level?.trayLimit ?? 6) - 1);
+  it("手数が残っていれば続く", () => {
+    const s = withBoard(base, [], { moves: 0 });
+    const { state, result } = place(s, config, 0, 0);
+    expect(result.gameOver).toBe(false);
+    expect(state.moves).toBe(1);
+    expect(movesLeft(state)).toBe((base.level?.moveLimit ?? 42) - 1);
   });
 
   it("エンドレスの place 結果にはレベルの項目を付けない(保存形式・golden を変えない)", () => {
     const endless = { ...base, mode: "endless" as const, level: undefined };
     delete (endless as { level?: unknown }).level;
-    const { result } = place(endless, config, 0, 0, 0);
+    const { result } = place(endless, config, 0, 0);
     expect(result).not.toHaveProperty("levelCleared");
     expect(Object.keys(JSON.parse(serialize(endless)) as object)).not.toContain("level");
   });
@@ -152,11 +144,11 @@ describe("クリアとトレイ切れ(docs/09 §1)", () => {
 
 describe("starsFor", () => {
   const limit = 10;
-  const cleared = (round: number): GameState => ({
+  const cleared = (moves: number): GameState => ({
     ...newLevelGame(config, 1, 0, 0),
     status: "cleared",
-    round,
-    level: { no: 1, goal: 3, trayLimit: limit },
+    moves,
+    level: { no: 1, goal: 3, moveLimit: limit },
   });
   it.each([
     [1, 3],
@@ -165,8 +157,8 @@ describe("starsFor", () => {
     [8, 2], // ceil(10 × 0.8) = 8
     [9, 1],
     [10, 1],
-  ])("トレイ %i 枚目でクリア → ★%i", (round, stars) => {
-    expect(starsFor(cleared(round), L)).toBe(stars);
+  ])("%i 手でクリア → ★%i", (moves, stars) => {
+    expect(starsFor(cleared(moves), L)).toBe(stars);
   });
   it("クリアしていなければ 0", () => {
     expect(starsFor(newLevelGame(config, 1, 0, 0), L)).toBe(0);
@@ -187,7 +179,7 @@ describe("保存形式", () => {
     ).toBeNull();
     expect(deserialize(JSON.stringify({ ...s, level: undefined }))).toBeNull();
     expect(
-      deserialize(JSON.stringify({ ...s, level: { no: 0, goal: 3, trayLimit: 6 } })),
+      deserialize(JSON.stringify({ ...s, level: { no: 0, goal: 3, moveLimit: 6 } })),
     ).toBeNull();
   });
 });
@@ -262,11 +254,10 @@ describe("進捗の保存", () => {
     expect(totalStars(p)).toBe(5);
   });
 
-  it("欠片のセルにはピースを置けない", () => {
+  it("欠片のセルにはかけらを置けない", () => {
     const s = newLevelGame(config, 40, 0, 0);
     const i = [...s.board].findIndex((c) => c === OBSTACLE);
-    const dot = { ...s, tray: [{ shapeId: "dot" }, null, null] };
-    expect(getShape("dot")).toBeDefined();
-    expect(place(dot, config, 0, i % s.size, Math.floor(i / s.size)).result.ok).toBe(false);
+    expect(i).toBeGreaterThanOrEqual(0);
+    expect(place(s, config, i % s.size, Math.floor(i / s.size)).result.ok).toBe(false);
   });
 });

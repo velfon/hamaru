@@ -5,7 +5,6 @@
  * 数値には必ず上下限を付ける。
  */
 import { z } from "zod";
-import { SHAPE_IDS } from "../core/shapes";
 import type { ResolvedConfig } from "../core/types";
 
 // 本番の CSP は `script-src` に 'unsafe-eval' を含まない(public/_headers)。
@@ -14,33 +13,15 @@ import type { ResolvedConfig } from "../core/types";
 // (docs/02 §11 N-7)。検証結果は変わらない。
 z.config({ jitless: true });
 
-const shapeIdSchema = z.enum([...SHAPE_IDS] as [string, ...string[]]);
-
-/** 形状の重み。0〜5(docs/02 §4.1)。 */
-const weightSchema = z.number().min(0).max(5);
-
-const weightsSchema = z
-  .record(shapeIdSchema, weightSchema)
-  .refine((w) => Object.values(w).some((v) => v > 0), {
-    message: "weights は少なくとも 1 つが 0 より大きい必要があります",
-  });
-
-const fitGuaranteeSchema = z.enum(["none", "oneOfThree"]);
-
 /** 盤サイズ。UI は 10 固定だが core は N×N 対応(docs/01 §2)。 */
 const sizeSchema = z.number().int().min(6).max(12);
 
-const pitySchema = z.strictObject({
-  enabled: z.boolean(),
-  threshold: z.number().min(0).max(1),
-  smallBoost: z.number().min(1).max(5),
-});
-
-const piecesSchema = z.strictObject({
-  weights: weightsSchema,
-  noTripleDuplicate: z.boolean(),
-  fitGuarantee: fitGuaranteeSchema,
-  pity: pitySchema,
+/** 逆手のルール値(docs/01 §5)。範囲を狭く取る(ここが壊れるとゲームが壊れる)。 */
+const sakateSchema = z.strictObject({
+  maxPiece: z.number().int().min(1).max(9),
+  growEvery: z.number().int().min(1).max(10),
+  window: z.union([z.literal(3), z.literal(5)]),
+  startTiles: z.number().int().min(0).max(40),
 });
 
 const streakSchema = z.strictObject({
@@ -85,23 +66,23 @@ const levelsSchema = z
     goalBase: z.number().int().min(1).max(20),
     goalPerLevel: z.number().min(0).max(5),
     goalMax: z.number().int().min(1).max(200),
-    traysPerLineStart: z.number().min(0.3).max(5),
-    traysPerLineEnd: z.number().min(0.3).max(5),
-    traysPerLineStep: z.number().min(0).max(1),
+    movesPerLineStart: z.number().min(0.3).max(30),
+    movesPerLineEnd: z.number().min(0.3).max(30),
+    movesPerLineStep: z.number().min(0).max(2),
     obstaclesPerLevel: z.number().min(0).max(5),
     obstaclesMax: z.number().int().min(0).max(60),
     starThree: z.number().min(0.1).max(1),
     starTwo: z.number().min(0.1).max(1),
   })
-  .refine((l) => l.traysPerLineEnd <= l.traysPerLineStart, {
-    message: "traysPerLineEnd は traysPerLineStart 以下にしてください(レベルが上がるほど厳しく)",
+  .refine((l) => l.movesPerLineEnd <= l.movesPerLineStart, {
+    message: "movesPerLineEnd は movesPerLineStart 以下にしてください(レベルが上がるほど厳しく)",
   })
   .refine((l) => l.starThree <= l.starTwo, { message: "starThree は starTwo 以下にしてください" });
 
 export const gameConfigSchema = z.strictObject({
   schemaVersion: z.literal(1),
   board: z.strictObject({ size: sizeSchema }),
-  pieces: piecesSchema,
+  sakate: sakateSchema,
   scoring: scoringSchema,
   input: inputSchema,
   daily: dailySchema,
@@ -118,15 +99,7 @@ export type GameConfig = z.infer<typeof gameConfigSchema>;
  */
 export const configOverrideSchema = z.strictObject({
   board: z.strictObject({ size: sizeSchema }).partial().optional(),
-  pieces: z
-    .strictObject({
-      weights: z.partialRecord(shapeIdSchema, weightSchema),
-      noTripleDuplicate: z.boolean(),
-      fitGuarantee: fitGuaranteeSchema,
-      pity: pitySchema.partial(),
-    })
-    .partial()
-    .optional(),
+  sakate: sakateSchema.partial().optional(),
   scoring: z
     .strictObject({
       perCell: scoringSchema.shape.perCell,
@@ -144,9 +117,9 @@ export const configOverrideSchema = z.strictObject({
       goalBase: z.number().int().min(1).max(20),
       goalPerLevel: z.number().min(0).max(5),
       goalMax: z.number().int().min(1).max(200),
-      traysPerLineStart: z.number().min(0.3).max(5),
-      traysPerLineEnd: z.number().min(0.3).max(5),
-      traysPerLineStep: z.number().min(0).max(1),
+      movesPerLineStart: z.number().min(0.3).max(30),
+      movesPerLineEnd: z.number().min(0.3).max(30),
+      movesPerLineStep: z.number().min(0).max(2),
       obstaclesPerLevel: z.number().min(0).max(5),
       obstaclesMax: z.number().int().min(0).max(60),
       starThree: z.number().min(0.1).max(1),

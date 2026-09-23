@@ -76,7 +76,7 @@ CREATE TABLE daily_scores (
   attempts      INTEGER NOT NULL DEFAULT 1,  -- その日の送信回数(migrations/0002)
   PRIMARY KEY (date, player)
 );
-CREATE INDEX daily_rank ON daily_scores (date, score DESC, submitted_at);
+CREATE INDEX daily_rank_v2 ON daily_scores (date, score DESC, submitted_at);
 
 CREATE TABLE totals (
   period     TEXT NOT NULL,       -- 'week' | 'month' | 'all'
@@ -87,8 +87,14 @@ CREATE TABLE totals (
   updated_at INTEGER NOT NULL,
   PRIMARY KEY (period, key, player)
 );
-CREATE INDEX totals_rank ON totals (period, key, total DESC, updated_at);
+CREATE INDEX totals_rank_v2 ON totals (period, key, total DESC, updated_at);
 ```
+
+**記録は 2026-09-24 に仕切り直した**(`migrations/0003`)。ルールを逆手に全面刷新したので、
+旧ルールの得点は新しい得点と比べられず、手の形式も `[トレイ, x, y]` → `[x, y]` に変わって
+**サーバで再生し直せない**。古い行は `daily_scores_v1` / `totals_v1` に残したまま脇へ寄せ、
+空の表から始めている。`players`(ニックネーム)はそのまま引き継ぐ — 名前は本人のもので、
+ルールとは関係ないため。索引は旧表に名前が付いたままなので、新しい表は `*_v2` を使う。
 
 - 週は **ISO 週**(月曜始まり、UTC)、月は UTC の暦月。キーはデイリーの**日付**から決める(送信時刻ではない)
 - 送信は 1 回の `batch`(トランザクション)で、**この順に**実行する:

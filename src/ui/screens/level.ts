@@ -9,18 +9,18 @@
  * │   ▣▣     ▣▣▣     ▣           │
  * └──────────────────────────────┘
  *
- * 盤・トレイ・ドラッグ・キーボード・演出はエンドレス / デイリーと同じ部品を使う。
+ * 盤・手持ち・ドラッグ・キーボード・演出はエンドレス / デイリーと同じ部品を使う。
  * レベルは実験を適用しない既定の config で遊ぶ(面の表の前提。docs/09 §4)。
  */
-import { canPlace, fillRatio, placeShape, shapeCellsAt } from "../../core/board";
-import { deserialize, place, serialize } from "../../core/game";
-import { levelVariant, newLevelGame, starsFor, traysLeft } from "../../core/levels";
-import { getShape } from "../../core/shapes";
-import type { Cell, GameState, Piece } from "../../core/types";
+import { canPlace, fillRatio, placePiece } from "../../core/board";
+import { deserialize, place, serialize, nextPieceSize } from "../../core/game";
+import { levelVariant, newLevelGame, starsFor, movesLeft } from "../../core/levels";
+import type { Cell, GameState } from "../../core/types";
 import { DEFAULT_CONFIG, LEVELS_TABLE } from "../../config";
 import { formatNumber, t } from "../../i18n";
 import {
   KEYS,
+  hasSeenHowto,
   loadLevelProgress,
   loadSavedGame,
   remove,
@@ -38,8 +38,8 @@ import { boardClearFx, clearFx, dropFx, gameOverDelay, renderNumber, vibrate } f
 import { createKeyboard } from "../keyboard";
 import { createSoundControl } from "../sound";
 import { navigate, type Screen } from "../router";
-import { langStore, settingsStore } from "../store";
-import { createTrayView } from "../tray-view";
+import { langStore, settingsStore, statsStore } from "../store";
+import { createHandView } from "../hand-view";
 import { seededState } from "./game";
 
 const config = DEFAULT_CONFIG;
@@ -88,6 +88,11 @@ export function starsView(stars: number, testId?: string): HTMLElement {
 }
 
 export function levelScreen(container: HTMLElement, query: URLSearchParams): Screen {
+  // ゲーム画面へ入るのが初めてなら、まず遊び方を挟む(docs/01 §9.7)。
+  if (!hasSeenHowto() && statsStore.get().gamesPlayed === 0) {
+    navigate("/howto");
+    return { unmount() {} };
+  }
   // 開発ビルドの E2E 専用(`?state=`)。本番では常に null。
   const seeded = seededState();
   if (seeded !== null && seeded.mode === "level" && seeded.level !== undefined) {
@@ -131,10 +136,10 @@ export function levelScreen(container: HTMLElement, query: URLSearchParams): Scr
 
   /* DOM */
   const boardView = createBoardView(state.size);
-  const trayView = createTrayView();
+  const handView = createHandView();
   const scoreValue = el("div", { class: "stat__value", "data-testid": "score" });
   const goalValue = el("div", { class: "stat__value", "data-testid": "goal" });
-  const traysValue = el("div", { class: "stat__value", "data-testid": "trays" });
+  const movesValue = el("div", { class: "stat__value", "data-testid": "trays" });
 
   const sound = createSoundControl(config);
 
@@ -156,15 +161,15 @@ export function levelScreen(container: HTMLElement, query: URLSearchParams): Scr
         goalValue,
       ]),
       el("div", { class: "stat stat--best" }, [
-        el("span", { class: "stat__label" }, [t("level.trays")]),
-        traysValue,
+        el("span", { class: "stat__label" }, [t("level.moves")]),
+        movesValue,
       ]),
     ]),
     el("div", { class: "hud__meta" }, [
       el("div", { class: "modetag", "data-testid": "modetag" }, [t("level.tag", { n: no })]),
     ]),
   ]);
-  const play = el("div", { class: "game__play" }, [boardView.root, trayView.root]);
+  const play = el("div", { class: "game__play" }, [boardView.root, handView.root]);
   container.appendChild(
     el("div", { class: "screen game", "data-testid": "level-screen" }, [hud, play]),
   );
@@ -172,11 +177,11 @@ export function levelScreen(container: HTMLElement, query: URLSearchParams): Scr
   function renderAll(): void {
     const fx = fxOptions();
     boardView.render(state.board);
-    trayView.render(state.tray);
+    handView.render(state.piece, nextPieceSize(state, config));
     renderNumber(scoreValue, formatNumber(state.score), fx);
     const goal = state.level?.goal ?? 0;
     goalValue.textContent = `${Math.min(state.linesCleared, goal)}/${goal}`;
-    traysValue.textContent = String(traysLeft(state));
+    movesValue.textContent = String(movesLeft(state));
   }
 
   function persist(): void {
@@ -188,29 +193,25 @@ export function levelScreen(container: HTMLElement, query: URLSearchParams): Scr
   const host: PlacementHost = {
     size: state.size,
     isPlaying: () => state.status === "playing" && overlay === null,
-    pieceAt: (index) => state.tray[index] ?? null,
-    preview(index, x, y): PlacementPreview {
-      const piece: Piece | null = state.tray[index] ?? null;
-      const shape = piece === null ? undefined : getShape(piece.shapeId);
-      if (shape === undefined) return { valid: false, cells: [], color: 0, rows: [], cols: [] };
-      if (!canPlace(state.board, state.size, shape, x, y)) {
-        return { valid: false, cells: [], color: shape.color, rows: [], cols: [] };
+    piece: () => state.piece,
+    preview(x, y): PlacementPreview {
+      const piece = state.piece;
+      if (!canPlace(state.board, state.size, piece, x, y)) {
+        return { valid: false, cells: [], color: piece.color, rows: [], cols: [] };
       }
-      const lines = completedLines(placeShape(state.board, state.size, shape, x, y), state.size);
+      const lines = completedLines(placePiece(state.board, state.size, piece, x, y), state.size);
       return {
         valid: true,
-        cells: shapeCellsAt(shape, x, y),
-        color: shape.color,
+        cells: piece.cells.map(([dx, dy]): [number, number] => [x + dx, y + dy]),
+        color: piece.color,
         rows: lines.rows,
         cols: lines.cols,
       };
     },
-    commit(index, x, y, delta) {
-      const piece = state.tray[index] ?? null;
-      const shape = piece === null ? undefined : getShape(piece.shapeId);
-      if (shape === undefined) return;
-      const filledBefore = placeShape(state.board, state.size, shape, x, y);
-      const { state: next, result } = place(state, config, index, x, y);
+    commit(x, y, delta) {
+      const piece = state.piece;
+      const filledBefore = placePiece(state.board, state.size, piece, x, y);
+      const { state: next, result } = place(state, config, x, y);
       if (!result.ok) return;
       const fx = fxOptions();
       state = next;
@@ -238,7 +239,7 @@ export function levelScreen(container: HTMLElement, query: URLSearchParams): Scr
         if (result.levelCleared !== true) sound.play("clear", { lines, streak: state.streak - 1 });
       } else {
         vibrate(10, haptics);
-        sound.play("place", { cells: shape.cells.length });
+        sound.play("place", { cells: piece.cells.length });
       }
       if (result.boardCleared) {
         boardClearFx(boardView, t("fx.boardClear", { n: config.scoring.boardClearBonus }), fx);
@@ -251,14 +252,14 @@ export function levelScreen(container: HTMLElement, query: URLSearchParams): Scr
       );
 
       if (result.levelCleared === true) void finish("clear", false);
-      else if (result.gameOver) void finish("over", result.outOfTrays === true);
+      else if (result.gameOver) void finish("over", result.outOfMoves === true);
     },
   };
 
   const previewClears = () => settingsStore.get().previewClears && config.input.previewClears;
   const drag = createDrag({
     boardView,
-    trayView,
+    handView,
     host,
     config,
     reduced: reducedMotion,
@@ -266,14 +267,14 @@ export function levelScreen(container: HTMLElement, query: URLSearchParams): Scr
   });
   const keyboard = createKeyboard({
     boardView,
-    trayView,
+    handView,
     host,
     previewClears,
     isDragging: drag.isDragging,
   });
 
   /* 終了 */
-  async function finish(reason: "clear" | "over", outOfTrays: boolean): Promise<void> {
+  async function finish(reason: "clear" | "over", outOfMoves: boolean): Promise<void> {
     if (ended) return;
     ended = true;
     tick();
@@ -290,17 +291,17 @@ export function levelScreen(container: HTMLElement, query: URLSearchParams): Scr
       lines: state.linesCleared,
       moves: state.moves,
       durationMs: activeMs,
-      round: state.round,
+      round: state.moves,
       longestStreak: state.longestStreak,
       isPractice: 0,
       fillRatioAtEnd: fillRatio(state.board),
     });
-    if (reason === "over") trayView.markDead();
+    if (reason === "over") handView.markDead();
     await gameOverDelay(fxOptions());
-    showOverlay(reason, stars, outOfTrays);
+    showOverlay(reason, stars, outOfMoves);
   }
 
-  function showOverlay(reason: "clear" | "over", stars: number, outOfTrays: boolean): void {
+  function showOverlay(reason: "clear" | "over", stars: number, outOfMoves: boolean): void {
     keyboard.deselect();
     const goal = state.level?.goal ?? 0;
     const actions = el("div", { class: "overlay__actions" });
@@ -349,7 +350,7 @@ export function levelScreen(container: HTMLElement, query: URLSearchParams): Scr
         : el(
             "div",
             { class: "overlay__rank overlay__rank--muted", "data-testid": "level-fail-reason" },
-            [t(outOfTrays ? "level.fail.trays" : "level.fail.stuck")],
+            [t(outOfMoves ? "level.fail.moves" : "level.fail.stuck")],
           ),
       el("div", { class: "overlay__score", "data-testid": "final-score" }, [
         formatNumber(state.score),
@@ -391,7 +392,7 @@ export function levelScreen(container: HTMLElement, query: URLSearchParams): Scr
 
   const unsubscribeLang = langStore.subscribe(() => {
     boardView.refreshLabels();
-    trayView.refreshLabels();
+    handView.refreshLabels();
   });
 
   return {

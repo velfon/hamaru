@@ -1,0 +1,16 @@
+{
+  "howto.title": "How to play",
+  "howto.lead": "One move explains it faster than a paragraph. Place a shard anywhere in the kiln.",
+  "howto.step.first": "Tap an empty square.",
+  "howto.step.returned": "The shape that was already around it has come back to your hand.",
+  "howto.step.empty": "Nothing was around it, so what comes back is a plain block.",
+  "howto.step.hot": "Go without clearing and the heat rises: each shard returns one square bigger.",
+  "howto.step.cleared": "A line filled and the gold ran through. The heat drops, and you start from one square again.",
+  "howto.step.stuck": "Nothing fits any more. That is how a game ends.",
+  "howto.auto": "Play a move for me",
+  "howto.reset": "Start over",
+  "howto.luck": "There is no luck in what you are dealt. The only randomness is the opening board. When it goes wrong, it was not a bad draw — it was the move you made a moment ago.",
+  "howto.start": "Start playing",
+  "howto.next": "Next",
+  "howto.demoLabel": "Demonstration kiln"
+}

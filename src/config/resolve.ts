@@ -77,11 +77,14 @@ export function resolveAssignment(
   return { exp: exp.id, variant: assignVariant(installId, exp) };
 }
 
-/** デイリーの強制(docs/01 §4.2)。盤の状態に依存させないための公平性要件。 */
+/**
+ * デイリーの強制(docs/01 §4.2)。全員が同じ問題を解くための公平性要件。
+ * 逆手には「救済」や「乱数の調整」が無いので、強制するものは今のところ無い
+ * (盤の始まり方とかけらの作り方は誰でも同じ)。関数は残す: 実験で config を
+ * いじれる以上、デイリーだけ固定したい値が出てきたらここに書く。
+ */
 export function forceDaily(config: ResolvedConfig): ResolvedConfig {
-  return deepMerge(config, {
-    pieces: { fitGuarantee: "none", pity: { enabled: false } },
-  });
+  return config;
 }
 
 export type ConfigValidator = (

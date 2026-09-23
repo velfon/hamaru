@@ -39,12 +39,19 @@ describe("golden", () => {
     }
   });
 
-  it("デイリーは盤の状態に依存しない(fitGuarantee / pity が OFF)", () => {
+  it("デイリーは誰がやっても同じ条件(config が base と同じ)", () => {
     const target = GOLDEN_TARGETS.find((t) => t.mode === "daily");
     expect(target).toBeDefined();
     if (target === undefined) return;
+    expect(configForTarget(DEFAULT_CONFIG, target).sakate).toEqual(DEFAULT_CONFIG.sakate);
+  });
+
+  it("供給に乱数が無い: 同じ盤・同じ手順なら、かけらも同じ", () => {
+    const target = GOLDEN_TARGETS[0] as (typeof GOLDEN_TARGETS)[number];
     const config = configForTarget(DEFAULT_CONFIG, target);
-    expect(config.pieces.fitGuarantee).toBe("none");
-    expect(config.pieces.pity.enabled).toBe(false);
+    const a = runGoldenScript(config, target.mode, target.seed, 20);
+    const b = runGoldenScript(config, target.mode, target.seed, 20);
+    expect(a.snapshot.piece).toEqual(b.snapshot.piece);
+    expect(a.state.heat).toBe(b.state.heat);
   });
 });

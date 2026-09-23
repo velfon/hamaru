@@ -12,7 +12,7 @@ export type Cell = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7;
 /** 素焼きの欠片のセル値。 */
 export const OBSTACLE: Cell = 7;
 
-/** ピースの色。0(空)を含まない。 */
+/** かけらの色。0(空)を含まない。 */
 export type Color = 1 | 2 | 3 | 4 | 5 | 6;
 
 /** 盤。長さ size*size。`board[y * size + x]`。 */
@@ -21,19 +21,13 @@ export type Board = Uint8Array;
 /** 形状の相対座標。`[dx, dy]`。 */
 export type CellOffset = readonly [number, number];
 
-export interface Shape {
-  readonly id: string;
-  /** 原点 (0,0) を左上とする相対座標。min(dx) === 0 かつ min(dy) === 0。 */
-  readonly cells: ReadonlyArray<CellOffset>;
-  /** バウンディングボックスの幅 = max(dx) + 1。 */
-  readonly w: number;
-  /** バウンディングボックスの高さ = max(dy) + 1。 */
-  readonly h: number;
-  readonly color: Cell;
-}
-
+/**
+ * かけら(逆手のピース)。形は盤から derive されるので、カタログも ID も無い。
+ * `cells` は正規化済み(左上が (0,0)、読み順)。
+ */
 export interface Piece {
-  readonly shapeId: string;
+  readonly cells: ReadonlyArray<CellOffset>;
+  readonly color: Color;
 }
 
 export type Mode = "endless" | "daily" | "level";
@@ -45,30 +39,30 @@ export interface LevelInfo {
   readonly no: number;
   /** 目標の列数。 */
   readonly goal: number;
-  /** 使えるトレイの数(= ラウンドの上限)。 */
-  readonly trayLimit: number;
+  /** 使える手数の上限。 */
+  readonly moveLimit: number;
 }
 
 export interface GameState {
-  readonly version: 1;
+  /** 2 = 逆手(docs/01)。1 は旧ルール(はめ込み)。 */
+  readonly version: 2;
   readonly mode: Mode;
   readonly seed: string;
-  /** mulberry32 の内部状態。途中再開しても同じ乱数列が続く。 */
-  readonly rng: number;
   readonly size: number;
   readonly board: Board;
-  /** 長さ 3。置き終わったスロットは null。 */
-  readonly tray: ReadonlyArray<Piece | null>;
+  /** 手持ちは常に 1 個。 */
+  readonly piece: Piece;
+  /** 最後に消してからの手数。これが増えるほど次のかけらが大きくなる(docs/01 §5)。 */
+  readonly heat: number;
   readonly score: number;
   readonly streak: number;
   readonly longestStreak: number;
-  readonly round: number;
   readonly moves: number;
   readonly linesCleared: number;
   readonly status: Status;
   /** epoch ms(演出・統計用。ロジックには使わない)。 */
   readonly startedAt: number;
-  /** レベルモードだけ。エンドレス・デイリーでは持たない(保存形式を変えない)。 */
+  /** レベルモードだけ。 */
   readonly level?: LevelInfo;
 }
 
@@ -81,34 +75,31 @@ export interface PlaceResult {
   scoreDelta: number;
   streakAfter: number;
   boardCleared: boolean;
-  newTray: boolean;
+  /** この手のあとの熱(= 次のかけらの大きさを決める)。 */
+  heatAfter: number;
+  /** 次に配られるかけら。 */
+  nextPiece: Piece;
   gameOver: boolean;
   /** レベルモード: この手で目標に達した。 */
   levelCleared?: boolean;
-  /** レベルモード: トレイを使い切って失敗した。 */
-  outOfTrays?: boolean;
+  /** レベルモード: 手数を使い切って失敗した。 */
+  outOfMoves?: boolean;
 }
 
 /* ------------------------------------------------------------------ */
 /* 設定(docs/02 §4.1)                                                 */
 /* ------------------------------------------------------------------ */
 
-export type FitGuarantee = "none" | "oneOfThree";
-
-export interface PityConfig {
-  readonly enabled: boolean;
-  /** 盤の埋まり率がこれ以上なら小形状の重みを底上げする。0〜1。 */
-  readonly threshold: number;
-  /** セル数 3 以下の形状の重み倍率。 */
-  readonly smallBoost: number;
-}
-
-export interface PiecesConfig {
-  /** 形状 ID → 重み。0〜5。 */
-  readonly weights: Readonly<Record<string, number>>;
-  readonly noTripleDuplicate: boolean;
-  readonly fitGuarantee: FitGuarantee;
-  readonly pity: PityConfig;
+/** 逆手のルール値(docs/01 §5)。 */
+export interface SakateConfig {
+  /** かけらの上限(マス数)。 */
+  readonly maxPiece: number;
+  /** 何手ごとにかけらが 1 マス育つか(消すと熱は 0 に戻る)。 */
+  readonly growEvery: number;
+  /** 次のかけらを読み取る窓の大きさ(奇数)。 */
+  readonly window: number;
+  /** 始めの盤に置いておくタイルの数。 */
+  readonly startTiles: number;
 }
 
 export interface StreakConfig {
@@ -154,9 +145,9 @@ export interface LevelsConfig {
   readonly goalBase: number;
   readonly goalPerLevel: number;
   readonly goalMax: number;
-  readonly traysPerLineStart: number;
-  readonly traysPerLineEnd: number;
-  readonly traysPerLineStep: number;
+  readonly movesPerLineStart: number;
+  readonly movesPerLineEnd: number;
+  readonly movesPerLineStep: number;
   readonly obstaclesPerLevel: number;
   readonly obstaclesMax: number;
   readonly starThree: number;
@@ -166,7 +157,7 @@ export interface LevelsConfig {
 export interface ResolvedConfig {
   readonly schemaVersion: number;
   readonly board: { readonly size: number };
-  readonly pieces: PiecesConfig;
+  readonly sakate: SakateConfig;
   readonly scoring: ScoringConfig;
   readonly input: InputConfig;
   readonly daily: DailyConfig;

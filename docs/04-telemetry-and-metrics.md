@@ -61,7 +61,7 @@ Dataset: `hamaru_events`。Worker 側で以下に詰め替える(`worker/events.
 | `double2` | `lines` |
 | `double3` | `moves` |
 | `double4` | `durationMs` |
-| `double5` | `round` |
+| `double5` | `round`(逆手にはラウンドが無いので常に 0。N-11) |
 | `double6` | `longestStreak` |
 | `double7` | `isPractice`(0/1) |
 | `double8` | `resumed`(0/1) |
@@ -276,3 +276,12 @@ docs/08 §1 の変更で、デイリーは 1 日に何度でも挑戦できる�
 ### N-9. レベルモードの追記(2026-09-18、docs/09 §6)
 `mode` に `"level"`、`game_end.reason` に `"clear"` を足した(列の位置は変えない)。
 `median_game_seconds` は `reason = over` だけを数えるので、クリアで終わる短いゲームは混ざらない。
+
+### N-11. ルール刷新(逆手)でも列の意味は変えない(2026-09-24)
+docs/01 を「逆手」に全面刷新し、トレイとラウンドという単位が無くなった。テレメトリは**そのまま**にする:
+
+- `round`(`double5`)列は残し、**常に 0 を送る**。列を消すと過去のデータが読めなくなる
+- 1 ゲームの長さは `moves`(`double3`)で見る。逆手では 1 手 = 1 かけらなので、
+  旧ルールの `round × 3` とおおよそ同じ粒度になる
+- 熱(`heat`)を見たくなったら**新しい列を足す**(意味の変更はしない)。
+  いまは送っていない(盤の内容に近い情報なので、必要が出てから足す)

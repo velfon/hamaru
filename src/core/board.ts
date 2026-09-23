@@ -1,8 +1,7 @@
 /**
  * 盤の操作(docs/01 §5、docs/02 §3)。すべて純粋関数で、引数の盤を変更しない。
  */
-import { getShape } from "./shapes";
-import type { Board, Piece, Shape } from "./types";
+import type { Board, Piece } from "./types";
 
 export function createBoard(size: number): Board {
   return new Uint8Array(size * size);
@@ -12,10 +11,10 @@ export function boardIndex(size: number, x: number, y: number): number {
   return y * size + x;
 }
 
-/** 形状の全セルが盤内かつ空なら true(docs/01 §5.1)。 */
-export function canPlace(board: Board, size: number, shape: Shape, x: number, y: number): boolean {
+/** かけらの全セルが盤内かつ空なら true(docs/01 §5.1)。 */
+export function canPlace(board: Board, size: number, piece: Piece, x: number, y: number): boolean {
   if (!Number.isInteger(x) || !Number.isInteger(y)) return false;
-  for (const [dx, dy] of shape.cells) {
+  for (const [dx, dy] of piece.cells) {
     const cx = x + dx;
     const cy = y + dy;
     if (cx < 0 || cy < 0 || cx >= size || cy >= size) return false;
@@ -25,17 +24,12 @@ export function canPlace(board: Board, size: number, shape: Shape, x: number, y:
 }
 
 /** 配置後の新しい盤を返す(copy-on-write)。呼び出し前に canPlace を確認すること。 */
-export function placeShape(board: Board, size: number, shape: Shape, x: number, y: number): Board {
+export function placePiece(board: Board, size: number, piece: Piece, x: number, y: number): Board {
   const next = Uint8Array.from(board);
-  for (const [dx, dy] of shape.cells) {
-    next[(y + dy) * size + (x + dx)] = shape.color;
+  for (const [dx, dy] of piece.cells) {
+    next[(y + dy) * size + (x + dx)] = piece.color;
   }
   return next;
-}
-
-/** 形状を (x, y) に置いたときに埋まるセルの絶対座標。 */
-export function shapeCellsAt(shape: Shape, x: number, y: number): Array<[number, number]> {
-  return shape.cells.map(([dx, dy]): [number, number] => [x + dx, y + dy]);
 }
 
 export interface ClearResult {
@@ -105,36 +99,38 @@ export function clearLines(board: Board, size: number): ClearResult {
   return { board: next, rows, cols, cells };
 }
 
-/** 形状を置ける位置(左上基準)をすべて列挙する。 */
-export function validPositions(board: Board, size: number, shape: Shape): Array<[number, number]> {
+/** かけらを置ける位置(左上基準)をすべて列挙する。 */
+export function validPositions(board: Board, size: number, piece: Piece): Array<[number, number]> {
   const out: Array<[number, number]> = [];
-  for (let y = 0; y + shape.h <= size; y++) {
-    for (let x = 0; x + shape.w <= size; x++) {
-      if (canPlace(board, size, shape, x, y)) out.push([x, y]);
+  const { w, h } = pieceBounds(piece);
+  for (let y = 0; y + h <= size; y++) {
+    for (let x = 0; x + w <= size; x++) {
+      if (canPlace(board, size, piece, x, y)) out.push([x, y]);
     }
   }
   return out;
 }
 
-/** 形状が盤のどこかに置けるか。 */
-export function shapeFits(board: Board, size: number, shape: Shape): boolean {
-  for (let y = 0; y + shape.h <= size; y++) {
-    for (let x = 0; x + shape.w <= size; x++) {
-      if (canPlace(board, size, shape, x, y)) return true;
+/** かけらが盤のどこかに置けるか(置けなければゲームオーバー。docs/01 §5.2)。 */
+export function pieceFits(board: Board, size: number, piece: Piece): boolean {
+  const { w, h } = pieceBounds(piece);
+  for (let y = 0; y + h <= size; y++) {
+    for (let x = 0; x + w <= size; x++) {
+      if (canPlace(board, size, piece, x, y)) return true;
     }
   }
   return false;
 }
 
-/** トレイに残るピースのうち 1 つでも置けるか(docs/01 §5.2 手順 6)。 */
-export function anyFits(board: Board, size: number, tray: ReadonlyArray<Piece | null>): boolean {
-  for (const piece of tray) {
-    if (piece === null || piece === undefined) continue;
-    const shape = getShape(piece.shapeId);
-    if (shape === undefined) continue;
-    if (shapeFits(board, size, shape)) return true;
+/** かけらの幅と高さ(正規化されているので max + 1)。 */
+function pieceBounds(piece: Piece): { w: number; h: number } {
+  let w = 0;
+  let h = 0;
+  for (const [x, y] of piece.cells) {
+    if (x + 1 > w) w = x + 1;
+    if (y + 1 > h) h = y + 1;
   }
-  return false;
+  return { w, h };
 }
 
 /** 盤の埋まり率 0〜1。 */

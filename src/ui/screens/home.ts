@@ -139,6 +139,16 @@ export function homeScreen(container: HTMLElement): Screen {
   });
   actions.appendChild(levelsButton);
 
+  /* 遊び方(docs/01 §9.7)。初回は自動で開くので、ここは「もう一度見る」導線。 */
+  actions.appendChild(
+    button({
+      label: t("home.howto"),
+      variant: "ghost",
+      testId: "howto-link",
+      onClick: () => navigate("/howto"),
+    }),
+  );
+
   /* 統計(空状態は誘導。docs/03 §7) */
   const statsRow =
     stats.gamesPlayed === 0

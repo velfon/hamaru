@@ -1,137 +1,136 @@
 /**
- * ゲーム状態の遷移(docs/01 §5、docs/02 §3)。
- * すべて純粋関数。`place` は引数の state / board を変更せず、新しい state を返す。
+ * 逆手(さかて)の 1 ゲーム(docs/01 §5)。**純粋**。
+ *
+ * 手順(docs/01 §5.2):
+ *   1. 手持ちのかけらを空きマスに置く
+ *   2. 埋まった行・列を消す
+ *   3. 得点を足す
+ *   4. **熱**を更新する(消したら 0、消さなければ +1)
+ *   5. 置いた場所から**次のかけらを作る**(docs/01 §5.3)
+ *   6. そのかけらがどこにも置けなければ終わり
+ *
+ * 乱数を使うのは**始めの盤を作るときだけ**。その後の供給に運は無い。
  */
-import {
-  anyFits,
-  canPlace,
-  clearLines,
-  createBoard,
-  isBoardEmpty,
-  placeShape,
-  shapeCellsAt,
-} from "./board";
-import { rngFromState, createRng } from "./rng";
-import { getShape } from "./shapes";
+import { canPlace, clearLines, createBoard, isBoardEmpty, placePiece, pieceFits } from "./board";
+import { colorFor, deriveNextPiece, pieceSizeFor } from "./derive";
+import { makePiece, normalize } from "./piece";
+import { createRng } from "./rng";
 import { scorePlacement } from "./scoring";
-import { TRAY_SIZE, generateTray } from "./tray";
-import type {
-  Board,
-  GameState,
-  LevelInfo,
-  Mode,
-  Piece,
-  PlaceResult,
-  ResolvedConfig,
-  Status,
-} from "./types";
+import type { Board, GameState, Mode, Piece, PlaceResult, ResolvedConfig } from "./types";
 
-function failedResult(): PlaceResult {
-  return {
-    ok: false,
-    placedCells: [],
-    clearedRows: [],
-    clearedCols: [],
-    clearedCells: [],
-    scoreDelta: 0,
-    streakAfter: 0,
-    boardCleared: false,
-    newTray: false,
-    gameOver: false,
-  };
+/** 最初のかけらは必ず 1 マス(どこにでも置ける)。 */
+export function seedPiece(): Piece {
+  return makePiece([[0, 0]], colorFor(0));
 }
 
-/** 新しいゲームを開始する。`now` は epoch ms(呼び出し側が渡す)。 */
-export function newGame(config: ResolvedConfig, mode: Mode, seed: string, now: number): GameState {
+/** 始めの盤。シードから決まる散らばり(ここだけが乱数)。 */
+export function startBoard(config: ResolvedConfig, seed: string): Board {
   const size = config.board.size;
   const board = createBoard(size);
   const rng = createRng(seed);
-  const tray = generateTray(rng, board, config);
+  const tiles = Math.max(0, Math.min(size * size - 1, config.sakate.startTiles));
+  let placed = 0;
+  let guard = 0;
+  while (placed < tiles && guard < tiles * 50) {
+    guard++;
+    const i = rng.nextInt(size * size);
+    if (board[i] !== 0) continue;
+    // 始めから行・列が埋まらないようにする(いきなり消えるのを防ぐ)
+    board[i] = (placed % 6) + 1;
+    placed++;
+  }
+  return board;
+}
+
+export function newGame(
+  config: ResolvedConfig,
+  mode: Mode,
+  seed: string,
+  startedAt: number,
+): GameState {
   return {
-    version: 1,
+    version: 2,
     mode,
     seed,
-    rng: rng.getState(),
-    size,
-    board,
-    tray,
+    size: config.board.size,
+    board: startBoard(config, seed),
+    piece: seedPiece(),
+    heat: 0,
     score: 0,
     streak: 0,
     longestStreak: 0,
-    round: 1,
     moves: 0,
     linesCleared: 0,
-    status: anyFits(board, size, tray) ? "playing" : "over",
-    startedAt: now,
+    status: "playing",
+    startedAt,
   };
 }
 
-/** トレイの trayIndex のピースを (x, y) に置く。 */
+const failed = (piece: Piece): PlaceResult => ({
+  ok: false,
+  placedCells: [],
+  clearedRows: [],
+  clearedCols: [],
+  clearedCells: [],
+  scoreDelta: 0,
+  streakAfter: 0,
+  boardCleared: false,
+  heatAfter: 0,
+  nextPiece: piece,
+  gameOver: false,
+});
+
+/** 手持ちのかけらを (x, y)(左上基準)に置く。 */
 export function place(
   state: GameState,
   config: ResolvedConfig,
-  trayIndex: number,
   x: number,
   y: number,
 ): { state: GameState; result: PlaceResult } {
-  if (state.status !== "playing") return { state, result: failedResult() };
-  if (!Number.isInteger(trayIndex) || trayIndex < 0 || trayIndex >= TRAY_SIZE) {
-    return { state, result: failedResult() };
+  if (state.status !== "playing" || !canPlace(state.board, state.size, state.piece, x, y)) {
+    return { state, result: failed(state.piece) };
   }
-  const piece = state.tray[trayIndex];
-  if (piece === null || piece === undefined) return { state, result: failedResult() };
-  const shape = getShape(piece.shapeId);
-  if (shape === undefined) return { state, result: failedResult() };
 
-  const size = state.size;
-  if (!canPlace(state.board, size, shape, x, y)) return { state, result: failedResult() };
-
-  const placedCells = shapeCellsAt(shape, x, y);
-  const filled = placeShape(state.board, size, shape, x, y);
-  const cleared = clearLines(filled, size);
+  const placedCells = state.piece.cells.map(([dx, dy]): [number, number] => [x + dx, y + dy]);
+  const filled = placePiece(state.board, state.size, state.piece, x, y);
+  const cleared = clearLines(filled, state.size);
   const lines = cleared.rows.length + cleared.cols.length;
-
   const streakAfter = lines > 0 ? state.streak + 1 : 0;
   const boardCleared = lines > 0 && isBoardEmpty(cleared.board);
   const scoreDelta = scorePlacement(
-    { cellCount: shape.cells.length, lines, streakAfter, boardCleared },
+    { cellCount: state.piece.cells.length, lines, streakAfter, boardCleared },
     config.scoring,
   );
 
-  let tray: Array<Piece | null> = state.tray.map((p, i) => (i === trayIndex ? null : p));
-  let rngState = state.rng;
-  let round = state.round;
-  const level = state.level;
-  const linesTotal = state.linesCleared + lines;
-  // レベル: 目標に達したらクリア(最後のトレイの最後の 1 手でも間に合えばクリア)。docs/09 §1
-  const levelCleared = level !== undefined && linesTotal >= level.goal;
-  const trayEmpty = tray.every((p) => p === null);
-  // レベル: トレイを使い切ったら次を配らずに失敗。
-  const outOfTrays =
-    level !== undefined && !levelCleared && trayEmpty && state.round >= level.trayLimit;
-  const newTray = trayEmpty && !levelCleared && !outOfTrays;
-  if (newTray) {
-    const rng = rngFromState(state.rng);
-    tray = generateTray(rng, cleared.board, config);
-    rngState = rng.getState();
-    round += 1;
-  }
+  const heatAfter = lines > 0 ? 0 : state.heat + 1;
+  const moves = state.moves + 1;
+  const nextPiece = deriveNextPiece(
+    cleared.board,
+    state.size,
+    placedCells,
+    heatAfter,
+    config.sakate,
+    moves,
+  );
 
-  const gameOver = !levelCleared && (outOfTrays || !anyFits(cleared.board, size, tray));
-  const status: Status = levelCleared ? "cleared" : gameOver ? "over" : "playing";
+  const level = state.level;
+  const linesCleared = state.linesCleared + lines;
+  const levelCleared = level !== undefined && linesCleared >= level.goal;
+  const outOfMoves = level !== undefined && !levelCleared && moves >= level.moveLimit;
+  const stuck = !pieceFits(cleared.board, state.size, nextPiece);
+  const gameOver = levelCleared ? false : stuck || outOfMoves;
 
   const next: GameState = {
     ...state,
-    rng: rngState,
     board: cleared.board,
-    tray,
+    piece: nextPiece,
+    heat: heatAfter,
     score: state.score + scoreDelta,
     streak: streakAfter,
     longestStreak: Math.max(state.longestStreak, streakAfter),
-    round,
-    moves: state.moves + 1,
-    linesCleared: linesTotal,
-    status,
+    moves,
+    linesCleared,
+    status: levelCleared ? "cleared" : gameOver ? "over" : "playing",
   };
 
   return {
@@ -145,191 +144,144 @@ export function place(
       scoreDelta,
       streakAfter,
       boardCleared,
-      newTray,
+      heatAfter,
+      nextPiece,
       gameOver,
-      ...(level !== undefined ? { levelCleared, outOfTrays } : {}),
+      ...(level !== undefined ? { levelCleared, outOfMoves } : {}),
     },
   };
 }
 
-/* ------------------------------------------------------------------ */
-/* 直列化                                                              */
-/* ------------------------------------------------------------------ */
-
-const B64_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-const B64_LOOKUP = new Map<string, number>(
-  B64_CHARS.split("").map((c, i): [string, number] => [c, i]),
-);
-
-/** Uint8Array → base64(環境依存の btoa / Buffer を使わない純粋実装)。 */
-export function encodeBoard(board: Board): string {
-  let out = "";
-  for (let i = 0; i < board.length; i += 3) {
-    const b0 = board[i] ?? 0;
-    const b1 = board[i + 1];
-    const b2 = board[i + 2];
-    out += B64_CHARS[b0 >> 2];
-    out += B64_CHARS[((b0 & 0b11) << 4) | ((b1 ?? 0) >> 4)];
-    out += b1 === undefined ? "=" : B64_CHARS[((b1 & 0b1111) << 2) | ((b2 ?? 0) >> 6)];
-    out += b2 === undefined ? "=" : B64_CHARS[b2 & 0b111111];
-  }
-  return out;
+/** 次のかけらの大きさ(UI の「熱」表示用)。 */
+export function nextPieceSize(state: GameState, config: ResolvedConfig): number {
+  return pieceSizeFor(state.heat, config.sakate);
 }
 
-/** base64 → Uint8Array。壊れていれば null。 */
-export function decodeBoard(s: string): Uint8Array | null {
-  if (s.length % 4 !== 0) return null;
-  const groups = s.length / 4;
-  if (groups === 0) return new Uint8Array(0);
+/* ------------------------------------------------------------------ */
+/* 保存形式(docs/01 §10)                                              */
+/* ------------------------------------------------------------------ */
 
-  let padding = 0;
-  if (s.endsWith("==")) padding = 2;
-  else if (s.endsWith("=")) padding = 1;
-
-  const bytes = new Uint8Array(groups * 3 - padding);
-  let o = 0;
-  for (let i = 0; i < s.length; i += 4) {
-    const chunk = [0, 1, 2, 3].map((k) => {
-      const ch = s[i + k] as string;
-      if (ch === "=") return 0;
-      const v = B64_LOOKUP.get(ch);
-      return v === undefined ? -1 : v;
-    });
-    if (chunk.some((v) => v < 0)) return null;
-    const [c0, c1, c2, c3] = chunk as [number, number, number, number];
-    const triple = (c0 << 18) | (c1 << 12) | (c2 << 6) | c3;
-    if (o < bytes.length) bytes[o++] = (triple >> 16) & 0xff;
-    if (o < bytes.length) bytes[o++] = (triple >> 8) & 0xff;
-    if (o < bytes.length) bytes[o++] = triple & 0xff;
-  }
-  return bytes;
-}
-
-interface SerializedState {
-  version: number;
-  mode: string;
+interface Serialized {
+  version: 2;
+  mode: Mode;
   seed: string;
-  rng: number;
   size: number;
   board: string;
-  tray: Array<string | null>;
+  piece: { cells: Array<[number, number]>; color: number };
+  heat: number;
   score: number;
   streak: number;
   longestStreak: number;
-  round: number;
   moves: number;
   linesCleared: number;
   status: string;
   startedAt: number;
-  level?: LevelInfo;
+  level?: { no: number; goal: number; moveLimit: number };
 }
 
+const toBase64 = (bytes: Uint8Array): string => {
+  let binary = "";
+  for (const b of bytes) binary += String.fromCharCode(b);
+  return btoa(binary);
+};
+
+const fromBase64 = (text: string): Uint8Array => {
+  const binary = atob(text);
+  const out = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) out[i] = binary.charCodeAt(i);
+  return out;
+};
+
 export function serialize(state: GameState): string {
-  const payload: SerializedState = {
-    version: state.version,
+  const payload: Serialized = {
+    version: 2,
     mode: state.mode,
     seed: state.seed,
-    rng: state.rng,
     size: state.size,
-    board: encodeBoard(state.board),
-    tray: state.tray.map((p) => (p === null || p === undefined ? null : p.shapeId)),
+    board: toBase64(state.board),
+    piece: {
+      cells: state.piece.cells.map(([x, y]): [number, number] => [x, y]),
+      color: state.piece.color,
+    },
+    heat: state.heat,
     score: state.score,
     streak: state.streak,
     longestStreak: state.longestStreak,
-    round: state.round,
     moves: state.moves,
     linesCleared: state.linesCleared,
     status: state.status,
     startedAt: state.startedAt,
-    ...(state.level !== undefined ? { level: state.level } : {}),
+    ...(state.level !== undefined ? { level: { ...state.level } } : {}),
   };
   return JSON.stringify(payload);
 }
 
-function isFiniteNumber(v: unknown): v is number {
-  return typeof v === "number" && Number.isFinite(v);
-}
-
-/** 壊れていれば null を返す(docs/06 §8「エラー経路」)。 */
-export function deserialize(s: string): GameState | null {
-  let raw: unknown;
+/** 壊れていれば null(呼び出し側はそのキーを捨てる)。 */
+export function deserialize(text: string): GameState | null {
+  let data: unknown;
   try {
-    raw = JSON.parse(s);
+    data = JSON.parse(text);
   } catch {
     return null;
   }
-  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) return null;
-  const o = raw as Record<string, unknown>;
+  if (typeof data !== "object" || data === null) return null;
+  const d = data as Partial<Serialized>;
+  if (d.version !== 2) return null;
+  if (d.mode !== "endless" && d.mode !== "daily" && d.mode !== "level") return null;
+  if (typeof d.size !== "number" || d.size < 4 || d.size > 20) return null;
+  if (typeof d.board !== "string" || typeof d.seed !== "string") return null;
 
-  if (o["version"] !== 1) return null;
-  const mode = o["mode"];
-  if (mode !== "endless" && mode !== "daily" && mode !== "level") return null;
-  const status = o["status"];
-  if (status !== "playing" && status !== "over" && status !== "cleared") return null;
-  let level: LevelInfo | undefined;
-  if (mode === "level") {
-    const l = o["level"] as Record<string, unknown> | undefined;
-    if (typeof l !== "object" || l === null) return null;
-    const { no, goal, trayLimit } = l;
-    if (![no, goal, trayLimit].every((v) => Number.isInteger(v) && (v as number) >= 1)) return null;
-    level = { no: no as number, goal: goal as number, trayLimit: trayLimit as number };
-  } else if (status === "cleared") {
+  let board: Uint8Array;
+  try {
+    board = fromBase64(d.board);
+  } catch {
     return null;
   }
-  if (typeof o["seed"] !== "string") return null;
-  if (typeof o["board"] !== "string") return null;
+  if (board.length !== d.size * d.size) return null;
 
-  const numeric = [
-    "rng",
-    "size",
-    "score",
-    "streak",
-    "longestStreak",
-    "round",
-    "moves",
-    "linesCleared",
-    "startedAt",
-  ];
-  for (const key of numeric) {
-    if (!isFiniteNumber(o[key])) return null;
+  const cells = d.piece?.cells;
+  if (!Array.isArray(cells) || cells.length === 0 || cells.length > 64) return null;
+  for (const cell of cells) {
+    if (!Array.isArray(cell) || cell.length !== 2) return null;
+    if (!Number.isInteger(cell[0]) || !Number.isInteger(cell[1])) return null;
   }
-  const size = o["size"] as number;
-  if (!Number.isInteger(size) || size < 1 || size > 64) return null;
+  const color = d.piece?.color;
+  if (typeof color !== "number" || color < 1 || color > 6) return null;
 
-  const board = decodeBoard(o["board"]);
-  if (board === null || board.length !== size * size) return null;
-  for (let i = 0; i < board.length; i++) {
-    if ((board[i] as number) > 7) return null;
-  }
+  const num = (v: unknown, fallback = 0): number =>
+    typeof v === "number" && Number.isFinite(v) && v >= 0 ? v : fallback;
 
-  const trayRaw = o["tray"];
-  if (!Array.isArray(trayRaw) || trayRaw.length !== TRAY_SIZE) return null;
-  const tray: Array<Piece | null> = [];
-  for (const entry of trayRaw) {
-    if (entry === null) {
-      tray.push(null);
-      continue;
-    }
-    if (typeof entry !== "string" || getShape(entry) === undefined) return null;
-    tray.push({ shapeId: entry });
-  }
+  const status = d.status === "over" || d.status === "cleared" ? d.status : "playing";
+  const level =
+    d.level !== undefined &&
+    typeof d.level.no === "number" &&
+    d.level.no >= 1 &&
+    typeof d.level.goal === "number" &&
+    typeof d.level.moveLimit === "number"
+      ? { no: d.level.no, goal: d.level.goal, moveLimit: d.level.moveLimit }
+      : undefined;
+  // `cleared` はレベルだけ。level なしの cleared は壊れた保存。
+  if (status === "cleared" && level === undefined) return null;
+  if (d.mode === "level" && level === undefined) return null;
 
   return {
-    version: 1,
-    mode,
-    seed: o["seed"],
-    rng: o["rng"] as number,
-    size,
+    version: 2,
+    mode: d.mode,
+    seed: d.seed,
+    size: d.size,
     board,
-    tray,
-    score: o["score"] as number,
-    streak: o["streak"] as number,
-    longestStreak: o["longestStreak"] as number,
-    round: o["round"] as number,
-    moves: o["moves"] as number,
-    linesCleared: o["linesCleared"] as number,
+    piece: makePiece(
+      normalize(cells.map(([x, y]) => [x, y] as const)),
+      color as GameState["piece"]["color"],
+    ),
+    heat: num(d.heat),
+    score: num(d.score),
+    streak: num(d.streak),
+    longestStreak: num(d.longestStreak),
+    moves: num(d.moves),
+    linesCleared: num(d.linesCleared),
     status,
-    startedAt: o["startedAt"] as number,
+    startedAt: num(d.startedAt),
     ...(level !== undefined ? { level } : {}),
   };
 }

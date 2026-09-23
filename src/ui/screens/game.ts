@@ -4,16 +4,16 @@
  * 状態の流れ: 入力(drag / keyboard)→ `core.place` → 新しい state を描画 → 演出。
  * 演出は描画の**後**に重ねるだけなので、演出を全部止めても DOM の最終形は変わらない。
  */
-import { canPlace, fillRatio, placeShape, shapeCellsAt } from "../../core/board";
+import { canPlace, fillRatio, placePiece } from "../../core/board";
 import { dailyNumber, dailySeed, endlessSeed, utcDateString } from "../../core/daily";
-import { deserialize, newGame, place, serialize } from "../../core/game";
-import { getShape } from "../../core/shapes";
+import { deserialize, newGame, place, serialize, nextPieceSize } from "../../core/game";
 import { streakMultiplier } from "../../core/scoring";
-import type { Cell, GameState, Mode, Piece, ResolvedConfig } from "../../core/types";
+import type { Cell, GameState, Mode, ResolvedConfig } from "../../core/types";
 import { resolveConfig, DEFAULT_CONFIG, DEFAULT_EXPERIMENTS } from "../../config";
 import { formatNumber, t } from "../../i18n";
 import {
   KEYS,
+  hasSeenHowto,
   loadSavedGame,
   remove,
   saveDailyResult,
@@ -41,7 +41,7 @@ import { createKeyboard } from "../keyboard";
 import { navigate, type Screen } from "../router";
 import { buildShareText, shareText, dailyLabelNo } from "../share";
 import { getContext, settingsStore, statsStore, langStore } from "../store";
-import { createTrayView } from "../tray-view";
+import { createHandView } from "../hand-view";
 
 /** 完全に埋まった行 / 列(消去プレビュー用)。 */
 function completedLines(board: Uint8Array, size: number): { rows: number[]; cols: number[] } {
@@ -83,7 +83,7 @@ function fxOptions(config: ResolvedConfig): FxOptions {
   };
 }
 
-type MoveTuple = [number, number, number];
+type MoveTuple = [number, number];
 
 interface StartInfo {
   state: GameState;
@@ -135,7 +135,7 @@ function startGame(mode: Mode, query: URLSearchParams, config: ResolvedConfig): 
     ) {
       const moves =
         saved.moves !== undefined && saved.moves.length === savedState.moves
-          ? saved.moves.map((m): MoveTuple => [m[0], m[1], m[2]])
+          ? saved.moves.map((m): MoveTuple => [m[0], m[1]])
           : null;
       return { state: savedState, resumed: true, date, moves };
     }
@@ -165,7 +165,7 @@ function startGame(mode: Mode, query: URLSearchParams, config: ResolvedConfig): 
       lines: savedState.linesCleared,
       moves: savedState.moves,
       durationMs: saved?.activeMs ?? 0,
-      round: savedState.round,
+      round: 0,
       longestStreak: savedState.longestStreak,
       isPractice: 0,
       fillRatioAtEnd: fillRatio(savedState.board),
@@ -183,6 +183,12 @@ function startGame(mode: Mode, query: URLSearchParams, config: ResolvedConfig): 
 
 export function gameScreen(mode: Mode) {
   return (container: HTMLElement, query: URLSearchParams): Screen => {
+    // 逆手のルールは見ないと分からないので、**いちばん最初の 1 回だけ**遊び方を挟む
+    // (docs/01 §9.7)。以後は自分から開いたときだけ出る。
+    if (!hasSeenHowto() && statsStore.get().gamesPlayed === 0) {
+      navigate("/howto");
+      return { unmount() {} };
+    }
     const ctx = getContext();
     const config =
       mode === "daily"
@@ -217,7 +223,7 @@ export function gameScreen(mode: Mode) {
     /* DOM                                                             */
     /* -------------------------------------------------------------- */
     const boardView = createBoardView(state.size);
-    const trayView = createTrayView();
+    const handView = createHandView();
 
     const scoreValue = el("div", { class: "stat__value", "data-testid": "score" });
     const bestValue = el("div", { class: "stat__value", "data-testid": "best" });
@@ -255,7 +261,7 @@ export function gameScreen(mode: Mode) {
       el("div", { class: "hud__meta" }, [modeTag, streakBadge]),
     ]);
 
-    const play = el("div", { class: "game__play" }, [boardView.root, trayView.root]);
+    const play = el("div", { class: "game__play" }, [boardView.root, handView.root]);
     const screen = el("div", { class: "screen game", "data-testid": "game-screen" }, [hud, play]);
     container.appendChild(screen);
 
@@ -267,7 +273,7 @@ export function gameScreen(mode: Mode) {
     function renderAll(): void {
       const fx = fxOptions(config);
       boardView.render(state.board);
-      trayView.render(state.tray);
+      handView.render(state.piece, nextPieceSize(state, config));
       renderNumber(scoreValue, formatNumber(state.score), fx);
       renderNumber(bestValue, formatNumber(Math.max(statsStore.get().bestScore, state.score)), fx);
       const mult = streakMultiplier(
@@ -300,33 +306,27 @@ export function gameScreen(mode: Mode) {
     const host: PlacementHost = {
       size: state.size,
       isPlaying: () => state.status === "playing" && overlay === null,
-      pieceAt: (index) => state.tray[index] ?? null,
-      preview(index, x, y): PlacementPreview {
-        const piece: Piece | null = state.tray[index] ?? null;
-        const shape = piece === null ? undefined : getShape(piece.shapeId);
-        if (shape === undefined) {
-          return { valid: false, cells: [], color: 0, rows: [], cols: [] };
-        }
-        const valid = canPlace(state.board, state.size, shape, x, y);
-        if (!valid) return { valid: false, cells: [], color: shape.color, rows: [], cols: [] };
-        const next = placeShape(state.board, state.size, shape, x, y);
+      piece: () => state.piece,
+      preview(x, y): PlacementPreview {
+        const piece = state.piece;
+        const valid = canPlace(state.board, state.size, piece, x, y);
+        if (!valid) return { valid: false, cells: [], color: piece.color, rows: [], cols: [] };
+        const next = placePiece(state.board, state.size, piece, x, y);
         const lines = completedLines(next, state.size);
         return {
           valid: true,
-          cells: shapeCellsAt(shape, x, y),
-          color: shape.color,
+          cells: piece.cells.map(([dx, dy]): [number, number] => [x + dx, y + dy]),
+          color: piece.color,
           rows: lines.rows,
           cols: lines.cols,
         };
       },
-      commit(index, x, y, delta) {
-        const piece = state.tray[index] ?? null;
-        const shape = piece === null ? undefined : getShape(piece.shapeId);
-        if (shape === undefined) return;
-        const filledBefore = placeShape(state.board, state.size, shape, x, y);
-        const { state: next, result } = place(state, config, index, x, y);
+      commit(x, y, delta) {
+        const piece = state.piece;
+        const filledBefore = placePiece(state.board, state.size, piece, x, y);
+        const { state: next, result } = place(state, config, x, y);
         if (!result.ok) return;
-        moves?.push([index, x, y]);
+        moves?.push([x, y]);
 
         const fx = fxOptions(config);
         state = next;
@@ -349,11 +349,10 @@ export function gameScreen(mode: Mode) {
           }));
           clearFx(boardView, tiles, result.clearedRows, result.clearedCols, fx);
           vibrate([10, 30, 20], haptics);
-          // 連鎖が続くほど高くなる(docs/10 §6)。state はもう次の状態なので streak は加算済み。
           sound.play("clear", { lines: cleared, streak: state.streak - 1 });
         } else {
           vibrate(10, haptics);
-          sound.play("place", { cells: shape.cells.length });
+          sound.play("place", { cells: piece.cells.length });
         }
 
         if (result.boardCleared) {
@@ -361,10 +360,9 @@ export function gameScreen(mode: Mode) {
           sound.play("boardClear");
         }
 
-        const lines = result.clearedRows.length + result.clearedCols.length;
         announce(
-          lines > 0
-            ? t("a11y.placed", { points: result.scoreDelta, lines })
+          cleared > 0
+            ? t("a11y.placed", { points: result.scoreDelta, lines: cleared })
             : t("a11y.placedOnly", { points: result.scoreDelta }),
         );
 
@@ -374,7 +372,7 @@ export function gameScreen(mode: Mode) {
 
     const drag = createDrag({
       boardView,
-      trayView,
+      handView,
       host,
       config,
       reduced: reducedMotion,
@@ -383,7 +381,7 @@ export function gameScreen(mode: Mode) {
 
     const keyboard = createKeyboard({
       boardView,
-      trayView,
+      handView,
       host,
       previewClears: () => settingsStore.get().previewClears && config.input.previewClears,
       isDragging: drag.isDragging,
@@ -448,7 +446,7 @@ export function gameScreen(mode: Mode) {
         lines: state.linesCleared,
         moves: state.moves,
         durationMs: activeMs,
-        round: state.round,
+        round: 0,
         longestStreak: state.longestStreak,
         isPractice: 0,
         fillRatioAtEnd: fillRatio(state.board),
@@ -459,7 +457,7 @@ export function gameScreen(mode: Mode) {
       // 送信は演出と並行して始める(docs/08 §7)。
       const submission =
         mode === "daily" && settingsStore.get().leaderboard ? submitResult() : null;
-      trayView.markDead();
+      handView.markDead();
       await gameOverDelay(fxOptions(config));
       showOverlay(newBest, dailyNo, submission);
     }
@@ -542,7 +540,7 @@ export function gameScreen(mode: Mode) {
         el("div", { class: "overlay__grid" }, [
           statBlock(t("over.lines"), formatNumber(state.linesCleared)),
           statBlock(t("over.streak"), formatNumber(state.longestStreak)),
-          statBlock(t("over.rounds"), formatNumber(state.round)),
+          statBlock(t("over.moves"), formatNumber(state.moves)),
         ]),
         submission === null ? null : rankLine(submission),
         actions,
@@ -657,7 +655,7 @@ export function gameScreen(mode: Mode) {
 
     const unsubscribeLang = langStore.subscribe(() => {
       boardView.refreshLabels();
-      trayView.refreshLabels();
+      handView.refreshLabels();
     });
 
     return {

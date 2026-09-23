@@ -1,18 +1,18 @@
 /**
  * キーボード操作(docs/01 §8.2)。
  *
- * `1` `2` `3` でトレイ選択、矢印で盤上のカーソル移動(ピースの左上基準)、
- * `Enter` / `Space` で配置、`Esc` で選択解除。選択中はゴーストを出す。
+ * 逆手は手持ちが 1 個なので、**選ぶ操作が要らない**。
+ * 矢印でカーソルを動かし、`Enter` / `Space` で置く。`Esc` でゴーストを消す。
  * 「置けません」は読み上げない(うるさいため)。配置成功と消去だけ `aria-live` で通知する。
  */
-import { getShape } from "../core/shapes";
+import type { Piece } from "../core/types";
 import type { BoardView } from "./board-view";
 import type { PlacementHost } from "./drag";
-import type { TrayView } from "./tray-view";
+import type { HandView } from "./hand-view";
 
 export interface KeyboardOptions {
   boardView: BoardView;
-  trayView: TrayView;
+  handView: HandView;
   host: PlacementHost;
   previewClears: () => boolean;
   /** ドラッグ中はキーボード操作を無視する。 */
@@ -22,7 +22,8 @@ export interface KeyboardOptions {
 export interface KeyboardController {
   destroy(): void;
   deselect(): void;
-  selected(): number | null;
+  /** カーソルを出しているか。 */
+  active(): boolean;
 }
 
 function isTypingTarget(target: EventTarget | null): boolean {
@@ -31,35 +32,43 @@ function isTypingTarget(target: EventTarget | null): boolean {
   return tag === "INPUT" || tag === "SELECT" || tag === "TEXTAREA" || target.isContentEditable;
 }
 
+function bounds(piece: Piece): { w: number; h: number } {
+  let w = 0;
+  let h = 0;
+  for (const [x, y] of piece.cells) {
+    if (x + 1 > w) w = x + 1;
+    if (y + 1 > h) h = y + 1;
+  }
+  return { w, h };
+}
+
 export function createKeyboard(opts: KeyboardOptions): KeyboardController {
-  const { boardView, trayView, host } = opts;
-  let selected: number | null = null;
+  const { boardView, handView, host } = opts;
+  let active = false;
   let cursor = { x: 0, y: 0 };
 
-  function size(index: number): { w: number; h: number } | null {
-    const piece = host.pieceAt(index);
-    if (piece === null) return null;
-    const shape = getShape(piece.shapeId);
-    return shape === undefined ? null : { w: shape.w, h: shape.h };
+  function held(): { w: number; h: number } | null {
+    const piece = host.piece();
+    return piece === null ? null : bounds(piece);
   }
 
   function clearVisuals(): void {
     boardView.clearGhost();
     boardView.setClearPreview([], []);
     boardView.setCursor(null);
-    trayView.setSelected(null);
+    handView.setSelected(false);
   }
 
   function deselect(): void {
-    selected = null;
+    active = false;
     clearVisuals();
   }
 
   function draw(): void {
-    if (selected === null) return;
-    const preview = host.preview(selected, cursor.x, cursor.y);
+    if (!active) return;
+    const preview = host.preview(cursor.x, cursor.y);
     boardView.setCursor(cursor);
-    trayView.setSelected(selected);
+    handView.setSelected(true);
     if (preview.valid) {
       boardView.setGhost(preview.cells, preview.color);
       boardView.setClearPreview(
@@ -72,20 +81,24 @@ export function createKeyboard(opts: KeyboardOptions): KeyboardController {
     }
   }
 
-  function select(index: number): void {
-    const dims = size(index);
+  /** カーソルを出す(最初の矢印キー / 手持ちのキーボードクリック)。 */
+  function activate(): void {
+    const dims = held();
     if (dims === null || !host.isPlaying()) return;
-    selected = index;
+    active = true;
     cursor = {
-      x: Math.min(cursor.x, host.size - dims.w),
-      y: Math.min(cursor.y, host.size - dims.h),
+      x: Math.max(0, Math.min(host.size - dims.w, cursor.x)),
+      y: Math.max(0, Math.min(host.size - dims.h, cursor.y)),
     };
     draw();
   }
 
   function moveCursor(dx: number, dy: number): void {
-    if (selected === null) return;
-    const dims = size(selected);
+    if (!active) {
+      activate();
+      return;
+    }
+    const dims = held();
     if (dims === null) return;
     cursor = {
       x: Math.max(0, Math.min(host.size - dims.w, cursor.x + dx)),
@@ -95,24 +108,20 @@ export function createKeyboard(opts: KeyboardOptions): KeyboardController {
   }
 
   function place(): void {
-    if (selected === null) return;
-    const preview = host.preview(selected, cursor.x, cursor.y);
+    if (!active) {
+      activate();
+      return;
+    }
+    const preview = host.preview(cursor.x, cursor.y);
     if (!preview.valid) return;
-    const index = selected;
     deselect();
-    host.commit(index, cursor.x, cursor.y, { dx: 0, dy: 0 });
+    host.commit(cursor.x, cursor.y, { dx: 0, dy: 0 });
   }
 
   function onKeyDown(ev: KeyboardEvent): void {
     if (isTypingTarget(ev.target) || opts.isDragging()) return;
     if (!host.isPlaying()) return;
     switch (ev.key) {
-      case "1":
-      case "2":
-      case "3":
-        ev.preventDefault();
-        select(Number(ev.key) - 1);
-        return;
       case "ArrowLeft":
         ev.preventDefault();
         moveCursor(-1, 0);
@@ -131,12 +140,11 @@ export function createKeyboard(opts: KeyboardOptions): KeyboardController {
         return;
       case "Enter":
       case " ":
-        if (selected === null) return;
         ev.preventDefault();
         place();
         return;
       case "Escape":
-        if (selected === null) return;
+        if (!active) return;
         ev.preventDefault();
         deselect();
         return;
@@ -145,26 +153,22 @@ export function createKeyboard(opts: KeyboardOptions): KeyboardController {
     }
   }
 
-  /** スロットの「キーボードによる」クリック(detail === 0)だけを選択として扱う。 */
-  function onTrayClick(ev: MouseEvent): void {
+  /** 手持ちの「キーボードによる」クリック(detail === 0)でカーソルを出す。 */
+  function onHandClick(ev: MouseEvent): void {
     if (ev.detail !== 0) return;
-    const target = ev.target;
-    if (!(target instanceof Element)) return;
-    const slot = target.closest<HTMLElement>(".slot");
-    if (slot === null) return;
-    select(Number(slot.dataset["slot"]));
+    activate();
   }
 
   document.addEventListener("keydown", onKeyDown);
-  trayView.root.addEventListener("click", onTrayClick);
+  handView.root.addEventListener("click", onHandClick);
 
   return {
     destroy() {
       document.removeEventListener("keydown", onKeyDown);
-      trayView.root.removeEventListener("click", onTrayClick);
+      handView.root.removeEventListener("click", onHandClick);
       clearVisuals();
     },
     deselect,
-    selected: () => selected,
+    active: () => active,
   };
 }

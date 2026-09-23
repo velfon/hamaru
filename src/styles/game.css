@@ -1,16 +1,16 @@
 /*
- * 盤・トレイ・演出(docs/03 §2 タイル / §4 レイアウト / §5 モーション)。
+ * 盤・手持ち・演出(docs/03 §2 タイル / §4 レイアウト / §5 モーション)。
  *
- * 幾何: 盤の一辺 = min(100vw − 32px, 100dvh − ヘッダ − トレイ − 余白, 520px)。
+ * 幾何: 盤の一辺 = min(100vw − 32px, 100dvh − ヘッダ − 手持ち − 余白, 520px)。
  * 目地 = セルの 8 %、角丸 = セルの 14 %。盤の外周にも目地 1 つ分の縁を取るので
  *   board = n·unit + (n+1)·0.08·unit  →  unit = board / (1.08n + 0.08)
  */
 
 .game {
   --n: 10;
-  /* ヘッダ(= スコア行)+ トレイ + 余白を引いた残りに収める。docs/03 §4 */
+  /* ヘッダ(= スコア行)+ 手持ち + 余白を引いた残りに収める。docs/03 §4 */
   --board: min(100vw - 2 * var(--gutter), 100dvh - var(--header-h) - var(--tray-h) - 24px, 520px);
-  /* ゲーム画面はスクロールしない(盤とトレイが必ず画面内に収まる) */
+  /* ゲーム画面はスクロールしない(盤と手持ちが必ず画面内に収まる) */
   height: 100dvh;
   min-height: 0;
   overflow: hidden;
@@ -116,7 +116,7 @@
   flex: 1;
   display: flex;
   flex-direction: column;
-  /* 盤とトレイを 1 組として、残りの高さの中央に置く(間は 16px 固定。docs/03 §4)。 */
+  /* 盤と手持ちを 1 組として、残りの高さの中央に置く(間は 16px 固定。docs/03 §4)。 */
   justify-content: center;
   min-height: 0;
 }
@@ -234,17 +234,52 @@
 }
 
 /* ------------------------------------------------------------------ */
-/* トレイ                                                               */
+/* 手持ち                                                               */
 /* ------------------------------------------------------------------ */
 
-.tray {
+/* 手持ち(逆手は 1 個)+ 熱。docs/01 §9.2 */
+.hand {
   height: var(--tray-h);
   flex: none;
   margin-top: 16px;
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
   touch-action: none;
+}
+
+.hand .slot {
+  flex: none;
+  min-width: calc(var(--unit) * 3.4);
+  min-height: calc(var(--unit) * 3.4);
+}
+
+/* 次のかけらの大きさ = 熱。消すと 1 つに戻る。 */
+.heat {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--ink-muted);
+  font-size: var(--fs-small);
+}
+
+.heat__label {
+  letter-spacing: 0.08em;
+}
+
+.heat__pip {
+  width: 9px;
+  height: 9px;
+  border-radius: 3px;
+  background: var(--ink-muted);
+  opacity: 0.55;
+}
+
+/* 5 つ目(上限)は金継ぎ色で「これ以上は育たない」ことを見せる */
+.heat__pip:nth-child(6) {
+  background: var(--kintsugi);
+  opacity: 1;
 }
 
 .slot {
@@ -292,7 +327,7 @@
   background: color-mix(in oklab, var(--kintsugi), transparent 86%);
 }
 
-/* ゲームオーバー確定時、置けないピースを暗転(docs/03 §5) */
+/* ゲームオーバー確定時、置けないかけらを暗転(docs/03 §5) */
 .slot[data-dead="1"] .slot__grid {
   animation: piece-dim 600ms var(--ease-in-out) forwards;
 }
@@ -311,7 +346,7 @@
 }
 
 /* ------------------------------------------------------------------ */
-/* ドラッグ中のピース                                                    */
+/* ドラッグ中のかけら                                                    */
 /* ------------------------------------------------------------------ */
 
 .draglayer {
@@ -519,7 +554,7 @@
 }
 
 /* ------------------------------------------------------------------ */
-/* 横長(高さ < 500px): 盤を左、トレイを右(docs/03 §4)                   */
+/* 横長(高さ < 500px): 盤を左、手持ちを右(docs/03 §4)                   */
 /* ------------------------------------------------------------------ */
 
 @media (max-height: 500px) and (orientation: landscape) {
@@ -534,12 +569,12 @@
     gap: 24px;
   }
 
-  .tray {
+  .hand {
     height: auto;
     margin-top: 0;
     flex: 1;
-    grid-template-columns: 1fr;
-    grid-template-rows: repeat(3, 1fr);
+    flex-direction: column;
+    justify-content: center;
     max-height: var(--board);
   }
 }

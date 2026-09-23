@@ -10,119 +10,119 @@
       "bot": "random",
       "games": 2000,
       "moves": {
-        "mean": 20.913,
-        "median": 20,
-        "p10": 14,
-        "p90": 29,
-        "min": 10,
-        "max": 56
+        "mean": 22.849,
+        "median": 21,
+        "p10": 13,
+        "p90": 38,
+        "min": 11,
+        "max": 94
       },
       "score": {
-        "mean": 84.984,
-        "median": 74,
-        "p10": 55,
-        "p90": 129,
-        "min": 30,
-        "max": 406
+        "mean": 85.797,
+        "median": 75,
+        "p10": 45,
+        "p90": 146,
+        "min": 35,
+        "max": 429
       },
       "lines": {
-        "mean": 1.037,
-        "median": 0,
+        "mean": 1.447,
+        "median": 1,
         "p10": 0,
-        "p90": 3,
+        "p90": 4,
         "min": 0,
-        "max": 13
+        "max": 17
       },
-      "round": {
-        "mean": 7.364,
-        "median": 7,
-        "p10": 5,
-        "p90": 10,
+      "heat": {
+        "mean": 10.107,
+        "median": 8,
+        "p10": 6,
+        "p90": 15,
         "min": 4,
-        "max": 19
+        "max": 17
       },
-      "gameOverAtRound1": 0,
+      "gameOverAtMove1": 0,
       "boardClear": 0,
-      "elapsedMs": 204
+      "elapsedMs": 282
     },
     "greedy": {
       "bot": "greedy",
       "games": 2000,
       "moves": {
-        "mean": 83.299,
-        "median": 77,
-        "p10": 47,
-        "p90": 128,
-        "min": 17,
-        "max": 299
+        "mean": 124.162,
+        "median": 82,
+        "p10": 17,
+        "p90": 165,
+        "min": 14,
+        "max": 5000
       },
       "score": {
-        "mean": 562.205,
-        "median": 511.5,
-        "p10": 297,
-        "p90": 897,
-        "min": 112,
-        "max": 2152
+        "mean": 512.905,
+        "median": 353,
+        "p10": 65,
+        "p90": 719,
+        "min": 50,
+        "max": 19272
       },
       "lines": {
-        "mean": 23.91,
-        "median": 22,
-        "p10": 11,
-        "p90": 40,
-        "min": 3,
-        "max": 99
+        "mean": 22.381,
+        "median": 14,
+        "p10": 0,
+        "p90": 32,
+        "min": 0,
+        "max": 961
       },
-      "round": {
-        "mean": 28.148,
-        "median": 26,
-        "p10": 16,
-        "p90": 43,
-        "min": 6,
-        "max": 100
+      "heat": {
+        "mean": 10.878,
+        "median": 10,
+        "p10": 8,
+        "p90": 15,
+        "min": 1,
+        "max": 17
       },
-      "gameOverAtRound1": 0,
-      "boardClear": 0.008,
-      "elapsedMs": 1189
+      "gameOverAtMove1": 0,
+      "boardClear": 0,
+      "elapsedMs": 26586
     },
     "lookahead": {
       "bot": "lookahead",
       "games": 2000,
       "moves": {
-        "mean": 94.222,
-        "median": 86,
-        "p10": 50,
-        "p90": 149,
-        "min": 20,
-        "max": 383
+        "mean": 515.889,
+        "median": 275,
+        "p10": 83,
+        "p90": 731,
+        "min": 17,
+        "max": 5000
       },
       "score": {
-        "mean": 656.743,
-        "median": 590,
-        "p10": 328,
-        "p90": 1071,
-        "min": 118,
-        "max": 2853
+        "mean": 2084.519,
+        "median": 1131.5,
+        "p10": 330,
+        "p90": 3020,
+        "min": 65,
+        "max": 20112
       },
       "lines": {
-        "mean": 28.127,
-        "median": 25,
+        "mean": 100.73,
+        "median": 53,
         "p10": 13,
-        "p90": 47,
-        "min": 3,
-        "max": 129
+        "p90": 146,
+        "min": 0,
+        "max": 1002
       },
-      "round": {
-        "mean": 31.78,
-        "median": 29,
-        "p10": 17,
-        "p90": 50,
-        "min": 7,
-        "max": 128
+      "heat": {
+        "mean": 10.593,
+        "median": 11,
+        "p10": 8,
+        "p90": 14,
+        "min": 0,
+        "max": 17
       },
-      "gameOverAtRound1": 0,
-      "boardClear": 0.008,
-      "elapsedMs": 3939
+      "gameOverAtMove1": 0,
+      "boardClear": 0,
+      "elapsedMs": 1057107
     }
   },
-  "totalElapsedMs": 5336
+  "totalElapsedMs": 1083982
 }

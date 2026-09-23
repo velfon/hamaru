@@ -46,7 +46,11 @@ function render(container: HTMLElement): void {
       glaze: 2,
       eyebrow: "About",
       title: t("about.what.title"),
-      body: [paragraph("about.what.body")],
+      body: [
+        paragraph("about.what.body"),
+        paragraph("about.what.heat"),
+        paragraph("about.what.luck"),
+      ],
     },
     {
       glaze: 4,

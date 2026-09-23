@@ -1,55 +1,47 @@
 {
   "schemaVersion": 1,
-  "board": { "size": 10 },
-  "pieces": {
-    "weights": {
-      "dot": 1.0,
-      "h2": 1.0,
-      "h3": 1.0,
-      "h4": 0.8,
-      "h5": 0.5,
-      "v2": 1.0,
-      "v3": 1.0,
-      "v4": 0.8,
-      "v5": 0.5,
-      "sq2": 1.0,
-      "sq3": 0.35,
-      "c_ne": 0.7,
-      "c_nw": 0.7,
-      "c_se": 0.7,
-      "c_sw": 0.7,
-      "L_ne": 0.45,
-      "L_nw": 0.45,
-      "L_se": 0.45,
-      "L_sw": 0.45,
-      "t_n": 0.5,
-      "t_e": 0.5,
-      "t_s": 0.5,
-      "t_w": 0.5,
-      "r2x3": 0.4,
-      "r3x2": 0.4
-    },
-    "noTripleDuplicate": true,
-    "fitGuarantee": "oneOfThree",
-    "pity": { "enabled": true, "threshold": 0.6, "smallBoost": 1.5 }
+  "board": {
+    "size": 10
+  },
+  "sakate": {
+    "maxPiece": 5,
+    "growEvery": 2,
+    "window": 3,
+    "startTiles": 6
   },
   "scoring": {
     "perCell": 1,
     "lineBase": 10,
-    "streak": { "step": 0.25, "max": 2.0 },
+    "streak": {
+      "step": 0.25,
+      "max": 2.0
+    },
     "boardClearBonus": 300
   },
-  "input": { "touchLiftOffset": 70, "previewClears": true },
-  "daily": { "epoch": "2026-10-01", "shareGaugeMax": 6000 },
-  "fx": { "clearDurationMs": 320, "snapDurationMs": 120 },
-  "audio": { "bpm": 104, "volume": 0.32, "sfxVolume": 0.45 },
+  "input": {
+    "touchLiftOffset": 70,
+    "previewClears": true
+  },
+  "daily": {
+    "epoch": "2026-10-01",
+    "shareGaugeMax": 6000
+  },
+  "fx": {
+    "clearDurationMs": 320,
+    "snapDurationMs": 120
+  },
+  "audio": {
+    "bpm": 104,
+    "volume": 0.32,
+    "sfxVolume": 0.45
+  },
   "levels": {
     "goalBase": 3,
     "goalPerLevel": 0.25,
     "goalMax": 15,
-    "traysPerLineStart": 2.0,
-    "traysPerLineEnd": 1.1,
-    "traysPerLineStep": 0.02,
+    "movesPerLineStart": 14,
+    "movesPerLineEnd": 7,
+    "movesPerLineStep": 0.05,
     "obstaclesPerLevel": 0.3,
     "obstaclesMax": 18,
     "starThree": 0.6,

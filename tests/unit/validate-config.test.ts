@@ -48,10 +48,10 @@ describe("validate:config", () => {
   );
 
   it(
-    "範囲外の値(pity.threshold = 1.5)を検出して非ゼロ終了する",
+    "範囲外の値(sakate.maxPiece = 20)を検出して非ゼロ終了する",
     () => {
-      const config = baseConfig() as unknown as { pieces: { pity: { threshold: number } } };
-      config.pieces.pity.threshold = 1.5;
+      const config = baseConfig() as unknown as { sakate: Record<string, number> };
+      config.sakate["maxPiece"] = 20;
       const r = runValidate([writeTmp("bad-threshold.json", config)]);
       expect(r.code).toBe(1);
       expect(r.output).toContain("game-config");
@@ -60,10 +60,10 @@ describe("validate:config", () => {
   );
 
   it(
-    "範囲外の weights を検出する",
+    "範囲外の育ち方を検出する",
     () => {
-      const config = baseConfig() as unknown as { pieces: { weights: Record<string, number> } };
-      config.pieces.weights["dot"] = 99;
+      const config = baseConfig() as unknown as { sakate: Record<string, number> };
+      config.sakate["growEvery"] = 99;
       const r = runValidate([writeTmp("bad-weight.json", config)]);
       expect(r.code).toBe(1);
     },

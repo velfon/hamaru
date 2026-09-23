@@ -125,11 +125,11 @@ safe-auto  (触ったパス: src/config/experiments.json, kaizen/**)
 
 ### 6.1 事前登録テンプレート(`kaizen/experiments/TEMPLATE.md`)
 ```
-# EXP-0003: pity.threshold 0.6 → 0.5
+# EXP-0003: sakate.growEvery 2 → 3
 - 起票: 2026-10-12  / 状態: running
-- 背景(指標): median_game_seconds が 150 秒と短く、abandon_rate 18 %。終盤の詰みが早い仮説。
-- 仮説: 救済が早く入ると 1 ゲームが伸び、games_per_session が上がる。
-- 変更: pieces.pity.threshold = 0.5(treatment のみ)
+- 背景(指標): median_game_seconds が 150 秒と短く、abandon_rate 18 %。熱の上がりが速い仮説。
+- 仮説: かけらが大きくなるまでの猶予が伸びると 1 ゲームが伸び、games_per_session が上がる。
+- 変更: sakate.growEvery = 3(treatment のみ)
 - 主要指標: games_per_session(install 単位の平均)
 - ガードレール: crash_free ≥ control − 0.5pt / median_game_seconds 120〜600 / abandon_rate ≤ control + 3pt
 - 最小サンプル: 300 install / 腕、最大 14 日
@@ -158,9 +158,10 @@ safe-auto  (触ったパス: src/config/experiments.json, kaizen/**)
 ### 6.4 実験の候補(初期 BACKLOG の種)
 | 領域 | 候補 | 主要指標 |
 |---|---|---|
-| ルール | `pity.threshold` 0.6 / 0.5 / 0.7、`smallBoost` | games_per_session |
-| ルール | `fitGuarantee` none vs oneOfThree(エンドレス) | median_game_seconds, abandon_rate |
-| ルール | `sq3` の重み 0.35 → 0.25 | median_score, abandon_rate |
+| ルール | `sakate.growEvery` 2 / 3(熱の上がる速さ) | games_per_session |
+| ルール | `sakate.maxPiece` 5 / 4(終盤の詰みやすさ) | median_game_seconds, abandon_rate |
+| ルール | `sakate.window` 3 / 5(次のかけらがどれだけ盤を写すか) | median_score, abandon_rate |
+| ルール | `sakate.startTiles` 6 / 10(序盤の手がかり) | abandon_rate |
 | 配点 | ストリーク `step` 0.25 → 0.5、`max` 2 → 3 | games_per_session |
 | UX | 消去プレビュー ON/OFF | abandon_rate |
 | UX | タッチ持ち上げオフセット 70 → 90 | abandon_rate(誤配置の代理) |

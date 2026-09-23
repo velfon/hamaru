@@ -1,25 +1,94 @@
 import { describe, expect, it } from "vitest";
 import {
-  anyFits,
   boardIndex,
   canPlace,
   clearLines,
   createBoard,
   fillRatio,
   isBoardEmpty,
-  placeShape,
-  shapeCellsAt,
-  shapeFits,
+  pieceFits,
+  placePiece,
   validPositions,
 } from "../../src/core/board";
-import { getShape } from "../../src/core/shapes";
-import type { Board, Shape } from "../../src/core/types";
+import { makePiece, pieceCellsAt } from "../../src/core/piece";
+import type { Board, CellOffset, Piece } from "../../src/core/types";
 
 const SIZE = 10;
-const shape = (id: string): Shape => {
-  const s = getShape(id);
-  if (s === undefined) throw new Error(`unknown shape ${id}`);
-  return s;
+/** テスト用のかけら。旧ルールの形状 ID に相当するものを直接組む。 */
+const shape = (id: string): Piece => {
+  const table: Record<string, CellOffset[]> = {
+    dot: [[0, 0]],
+    h2: [
+      [0, 0],
+      [1, 0],
+    ],
+    h3: [
+      [0, 0],
+      [1, 0],
+      [2, 0],
+    ],
+    v2: [
+      [0, 0],
+      [0, 1],
+    ],
+    v3: [
+      [0, 0],
+      [0, 1],
+      [0, 2],
+    ],
+    sq2: [
+      [0, 0],
+      [1, 0],
+      [0, 1],
+      [1, 1],
+    ],
+    L_ne: [
+      [0, 0],
+      [0, 1],
+      [1, 1],
+    ],
+    // 北西が欠けた角(盤の (1,1) が埋まっていても (0,0) 基準で置ける)
+    c_nw: [
+      [1, 0],
+      [0, 1],
+    ],
+    sq3: [
+      [0, 0],
+      [1, 0],
+      [2, 0],
+      [0, 1],
+      [1, 1],
+      [2, 1],
+      [0, 2],
+      [1, 2],
+      [2, 2],
+    ],
+    h5: [
+      [0, 0],
+      [1, 0],
+      [2, 0],
+      [3, 0],
+      [4, 0],
+    ],
+    v5: [
+      [0, 0],
+      [0, 1],
+      [0, 2],
+      [0, 3],
+      [0, 4],
+    ],
+    r2x3: [
+      [0, 0],
+      [1, 0],
+      [0, 1],
+      [1, 1],
+      [0, 2],
+      [1, 2],
+    ],
+  };
+  const cells = table[id];
+  if (cells === undefined) throw new Error(`unknown shape ${id}`);
+  return makePiece(cells, 2);
 };
 
 const fillRow = (board: Board, y: number, from = 0, to = SIZE): void => {
@@ -60,8 +129,8 @@ describe("board", () => {
     it("重なり: 埋まっているセルには置けない", () => {
       const b = createBoard(SIZE);
       b[boardIndex(SIZE, 1, 1)] = 3;
-      expect(canPlace(b, SIZE, shape("sq2"), 0, 0)).toBe(false);
-      expect(canPlace(b, SIZE, shape("sq2"), 2, 2)).toBe(true);
+      expect(canPlace(b, SIZE, shape("sq3"), 0, 0)).toBe(false);
+      expect(canPlace(b, SIZE, shape("sq3"), 2, 2)).toBe(true);
       // L 字の欠けた部分は重なっても良い。
       expect(canPlace(b, SIZE, shape("c_nw"), 0, 0)).toBe(true);
     });
@@ -78,14 +147,13 @@ describe("board", () => {
     });
   });
 
-  it("placeShape は元の盤を変更しない(copy-on-write)", () => {
+  it("placePiece は元の盤を変更しない(copy-on-write)", () => {
     const b = createBoard(SIZE);
-    const next = placeShape(b, SIZE, shape("sq2"), 0, 0);
+    const next = placePiece(b, SIZE, shape("sq3"), 0, 0);
     expect(isBoardEmpty(b)).toBe(true);
-    expect(next[boardIndex(SIZE, 0, 0)]).toBe(shape("sq2").color);
-    expect(fillRatio(next)).toBeCloseTo(0.04);
-    expect(shapeCellsAt(shape("c_nw"), 5, 6)).toEqual([
-      [5, 6],
+    expect(next[boardIndex(SIZE, 0, 0)]).toBe(shape("sq3").color);
+    expect(fillRatio(next)).toBeCloseTo(0.09); // 3×3 = 9 マス
+    expect(pieceCellsAt(shape("c_nw"), 5, 6)).toEqual([
       [6, 6],
       [5, 7],
     ]);
@@ -157,31 +225,21 @@ describe("board", () => {
       expect(validPositions(b, SIZE, shape("dot"))).toHaveLength(100);
       expect(validPositions(b, SIZE, shape("h5"))).toHaveLength(6 * 10);
       expect(validPositions(b, SIZE, shape("sq3"))).toHaveLength(8 * 8);
-      expect(shapeFits(b, SIZE, shape("sq3"))).toBe(true);
+      expect(pieceFits(b, SIZE, shape("sq3"))).toBe(true);
     });
 
     it("満杯の盤ではどれも置けない", () => {
       const full = createBoard(SIZE).fill(1);
       expect(validPositions(full, SIZE, shape("dot"))).toEqual([]);
-      expect(shapeFits(full, SIZE, shape("dot"))).toBe(false);
-      expect(anyFits(full, SIZE, [{ shapeId: "dot" }, null, null])).toBe(false);
-    });
-
-    it("anyFits は null・未知 ID を読み飛ばす", () => {
-      const b = createBoard(SIZE);
-      expect(anyFits(b, SIZE, [null, null, null])).toBe(false);
-      expect(anyFits(b, SIZE, [null, { shapeId: "ghost" }, null])).toBe(false);
-      expect(anyFits(b, SIZE, [null, { shapeId: "ghost" }, { shapeId: "dot" }])).toBe(true);
+      expect(pieceFits(full, SIZE, shape("dot"))).toBe(false);
     });
 
     it("穴が 1 つだけの盤では dot だけが置ける", () => {
       const b = createBoard(SIZE).fill(1);
       b[boardIndex(SIZE, 5, 5)] = 0;
       expect(validPositions(b, SIZE, shape("dot"))).toEqual([[5, 5]]);
-      expect(shapeFits(b, SIZE, shape("h2"))).toBe(false);
-      expect(anyFits(b, SIZE, [{ shapeId: "h2" }, { shapeId: "sq2" }, { shapeId: "dot" }])).toBe(
-        true,
-      );
+      expect(pieceFits(b, SIZE, shape("h2"))).toBe(false);
+      expect(pieceFits(b, SIZE, shape("dot"))).toBe(true);
     });
   });
 
