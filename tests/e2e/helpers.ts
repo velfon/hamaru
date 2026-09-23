@@ -13,12 +13,13 @@ import type { GameState, LevelInfo, Mode, Piece } from "../../src/core/types";
 export interface StateOptions {
   mode?: Mode;
   board?: Uint8Array;
-  tray?: Array<Piece | null>;
   score?: number;
   size?: number;
   streak?: number;
   longestStreak?: number;
-  round?: number;
+  /** 手に持っているかけら(既定は 1 マス)。 */
+  piece?: Piece;
+  heat?: number;
   moves?: number;
   linesCleared?: number;
   level?: LevelInfo;
@@ -27,7 +28,7 @@ export interface StateOptions {
 export function makeState(options: StateOptions = {}): GameState {
   const size = options.size ?? 10;
   return {
-    version: 1,
+    version: 2,
     mode: options.mode ?? "endless",
     seed:
       options.mode === "daily"
@@ -35,14 +36,13 @@ export function makeState(options: StateOptions = {}): GameState {
         : options.mode === "level"
           ? "level:test"
           : "endless:test:1",
-    rng: 12345,
     size,
     board: options.board ?? new Uint8Array(size * size),
-    tray: options.tray ?? [{ shapeId: "dot" }, { shapeId: "h3" }, { shapeId: "sq2" }],
+    piece: options.piece ?? { cells: [[0, 0]], color: 2 },
+    heat: options.heat ?? 0,
     score: options.score ?? 0,
     streak: options.streak ?? 0,
     longestStreak: options.longestStreak ?? 0,
-    round: options.round ?? 1,
     moves: options.moves ?? 0,
     linesCleared: options.linesCleared ?? 0,
     status: "playing",
@@ -63,15 +63,14 @@ export function almostFullRow(size = 10, leaveTile = true): Uint8Array {
   return board;
 }
 
-/**
- * 盤: 各行 / 列に 2 マスずつ穴が空いた「あと 1 手で詰み」の状態。
- * 完成する行・列が無いので、dot を置いても消えずにゲームオーバーへ進む。
- */
+/** 盤: 「あと 1 手で詰み」の状態(熱が上がっていれば次のかけらが置けない)。 */
 export function almostDead(size = 10): Uint8Array {
+  // 空きが「飛び飛びの 1 マス」だけの盤。どの行・列も満杯にならないので消えず、
+  // 2 マス以上のかけらはどこにも置けない(= 次の手で詰む)。
   const board = new Uint8Array(size * size).fill(2);
   for (let y = 0; y < size; y++) {
     board[y * size + y] = 0;
-    board[y * size + ((y + 1) % size)] = 0;
+    board[y * size + ((y + size / 2) % size)] = 0;
   }
   return board;
 }
@@ -85,17 +84,17 @@ export async function gotoState(page: Page, state: GameState, hash: string): Pro
   await page.getByTestId("board").waitFor();
 }
 
-/** スロットのピースのバウンディングボックス(セル数)。 */
-async function pieceSize(page: Page, slot: number): Promise<{ w: number; h: number }> {
-  return page.evaluate((index) => {
-    const grid = document.querySelector(`[data-testid="slot-${index}"] .slot__grid`);
+/** 手持ちのかけらのバウンディングボックス(セル数)。 */
+async function pieceSize(page: Page): Promise<{ w: number; h: number }> {
+  return page.evaluate(() => {
+    const grid = document.querySelector('[data-testid="hand"] .slot__grid');
     if (grid === null) return { w: 0, h: 0 };
     const style = getComputedStyle(grid);
     return {
       w: style.gridTemplateColumns.split(" ").length,
       h: style.gridTemplateRows.split(" ").length,
     };
-  }, slot);
+  });
 }
 
 /*
@@ -119,19 +118,14 @@ export async function waitForBoardLayout(page: Page): Promise<void> {
  * 各段階で**アプリ側の状態**(ドラッグ中のピース / ゴースト)を待ってから次へ進むので、
  * 実行環境が遅くてもタイミングで落ちない。
  */
-export async function grabPiece(
-  page: Page,
-  slot: number,
-  x: number,
-  y: number,
-): Promise<() => Promise<void>> {
+export async function grabPiece(page: Page, x: number, y: number): Promise<() => Promise<void>> {
   await waitForBoardLayout(page);
-  const { w, h } = await pieceSize(page, slot);
-  const from = await page.getByTestId(`slot-${slot}`).boundingBox();
+  const { w, h } = await pieceSize(page);
+  const from = await page.getByTestId("hand").boundingBox();
   const first = await page.locator(`#c-${x}-${y}`).boundingBox();
   const last = await page.locator(`#c-${x + w - 1}-${y + h - 1}`).boundingBox();
   if (from === null || first === null || last === null) {
-    throw new Error(`ドラッグ対象が見つかりません: slot=${slot} (${x},${y})`);
+    throw new Error(`ドラッグ対象が見つかりません: (${x},${y})`);
   }
   const target = {
     x: (first.x + last.x + last.width) / 2,
@@ -152,10 +146,46 @@ export async function grabPiece(
 }
 
 /**
- * トレイのピースを盤の (x, y)(= バウンディングボックスの左上)へドラッグして置く。
+ * いまの手持ちが置ける場所のうち、いちばん左上を返す。
+ * 逆手はかけらの形が手ごとに変わるので、テストから位置を決め打ちできない。
  */
-export async function dragPiece(page: Page, slot: number, x: number, y: number): Promise<void> {
-  const drop = await grabPiece(page, slot, x, y);
+export async function firstFit(page: Page): Promise<[number, number]> {
+  return page.evaluate(() => {
+    const grid = document.querySelector('[data-testid="hand"] .slot__grid');
+    if (grid === null) throw new Error("手持ちが見つかりません");
+    const cols = getComputedStyle(grid).gridTemplateColumns.split(" ").length;
+    const shape = [...grid.children]
+      .map((node, i) => ({
+        filled: (node as HTMLElement).dataset["c"] !== "0",
+        x: i % cols,
+        y: Math.floor(i / cols),
+      }))
+      .filter((c) => c.filled);
+    const cells = [...document.querySelectorAll<HTMLElement>(".board .cell")];
+    const size = Math.round(Math.sqrt(cells.length));
+    const empty = new Set(
+      cells.filter((c) => c.dataset["c"] === "0").map((c) => `${c.dataset["x"]},${c.dataset["y"]}`),
+    );
+    for (let y = 0; y < size; y++) {
+      for (let x = 0; x < size; x++) {
+        if (shape.every((c) => empty.has(`${x + c.x},${y + c.y}`)))
+          return [x, y] as [number, number];
+      }
+    }
+    throw new Error("置ける場所がありません");
+  });
+}
+
+/** 手持ちを「置ける場所」に置く(形が毎手変わるので位置は実行時に決める)。 */
+export async function placeNext(page: Page): Promise<[number, number]> {
+  const [x, y] = await firstFit(page);
+  await dragPiece(page, x, y);
+  return [x, y];
+}
+
+/** 手持ちのかけらを盤の (x, y)(= バウンディングボックスの左上)へドラッグして置く。 */
+export async function dragPiece(page: Page, x: number, y: number): Promise<void> {
+  const drop = await grabPiece(page, x, y);
   await drop();
 }
 
@@ -217,6 +247,18 @@ export const test = base.extend<{ telemetryCapture: Captured }>({
     async ({ context, browserName }, use) => {
       const box: Captured = { events: [], invalid: [], leaderboard: [], attempts: 0 };
       captured.set(context, box);
+      // 既定では「遊び方は見たことがある」状態で始める。初回だけ挟まる画面(docs/01 §9.7)は
+      // ほぼ全てのテストの前提を変えてしまうので、それ自体を見るテストだけが firstRun() で戻す。
+      await context.addInitScript(() => {
+        try {
+          localStorage.setItem(
+            "hamaru:v1:howto:seen",
+            JSON.stringify({ schemaVersion: 1, data: true }),
+          );
+        } catch {
+          /* プライベートモード等。その場合は遊び方が挟まるが、テスト側で見ない */
+        }
+      });
       if (browserName === "webkit") {
         // WebKit では sendBeacon の Blob 本文を Playwright が読めない(postData() が null)。
         // WebKit だけ sendBeacon を「使えない」扱いにし、fetch(keepalive)経路で送らせる。
@@ -341,4 +383,15 @@ export async function expectEvent(
   const found = (await telemetryEvents(page)).find(predicate);
   if (found === undefined) throw new Error("unreachable");
   return found;
+}
+
+/** 「遊び方をまだ見ていない」状態に戻す(docs/01 §9.7 の初回導線を見るテスト用)。 */
+export async function firstRun(page: Page): Promise<void> {
+  await page.addInitScript(() => {
+    try {
+      localStorage.removeItem("hamaru:v1:howto:seen");
+    } catch {
+      /* 何もしない */
+    }
+  });
 }

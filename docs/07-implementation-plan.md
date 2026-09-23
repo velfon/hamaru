@@ -35,14 +35,15 @@ H2〜H4 が無くてもローカル開発(M1〜M3)は進められる。
 **受け入れ**: カバレッジ `src/core` ≥ 95 %、golden 固定、`npm run validate:config` が範囲外を検出する。
 
 ### M2. シミュレーション(半日)
-- `sim/bots/*`、`sim/run.ts`、`sim/report.ts`。`npm run sim -- --games 2000` が 60 秒以内。
+- `sim/bots/*`、`sim/run.ts`、`sim/report.ts`。`random` / `greedy` は 2000 ゲームが 60 秒以内。
+  `lookahead` は逆手では 1 ゲームが 800 手級になるので、CI では 200 ゲームで回す(docs/06 §4)。
 - `sim/baseline.json` を生成し、帯域検査(`--check`)を実装。
 
-**受け入れ**: `random.gameOverAtRound1 = 0`、3 ボットの順位が `random < greedy < lookahead`(中央値スコア)。
+**受け入れ**: `random.gameOverAtMove1 = 0`、3 ボットの順位が `random < greedy < lookahead`(中央値スコア)。
 
 ### M3. UI(2 日)
 - **実装前に `frontend-design` スキルを読む**(ユーザ規約)。トークン・タイポ・モーションは [03](03-design-system.md) の値をそのまま使う。
-- 画面: ホーム / ゲーム / ゲームオーバー / 設定 / About。ルータ、ストア、盤・トレイ描画、ドラッグ、キーボード、演出、共有、i18n、ストレージ、PWA。
+- 画面: ホーム / ゲーム / ゲームオーバー / 設定 / About。ルータ、ストア、盤・手持ち描画、ドラッグ、キーボード、演出、共有、i18n、ストレージ、PWA。
 - Unbounded をサブセット化してセルフホスト(`public/fonts/`、数字 + 基本ラテン + 記号、woff2)。
 - E2E(Playwright)を [06 §5](06-quality-gates.md) の全シナリオ。
 

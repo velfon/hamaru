@@ -195,7 +195,7 @@ const EXPERIMENTS = {
       minUsersPerArm: 300,
       maxDays: 14,
       allocation: { control: 0.5, treatment: 0.5 },
-      variants: { control: {}, treatment: { pieces: { pity: { threshold: 0.5 } } } },
+      variants: { control: {}, treatment: { sakate: { growEvery: 3 } } },
       lockedInDaily: true,
     },
   ],

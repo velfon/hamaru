@@ -93,7 +93,7 @@ const post = (body: unknown): RequestInit => ({ method: "POST", body: JSON.strin
 export function submitDaily(
   installId: string,
   date: string,
-  moves: ReadonlyArray<readonly [number, number, number]>,
+  moves: ReadonlyArray<readonly [number, number]>,
   version: string,
 ): Promise<Result<SubmitJson>> {
   return call<SubmitJson>("/api/daily/submit", post({ installId, date, moves, version }));

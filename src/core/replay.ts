@@ -8,8 +8,8 @@
 import { newGame, place } from "./game";
 import type { GameState, Mode, ResolvedConfig } from "./types";
 
-/** 1 手 = [トレイの位置 0〜2, x, y](x, y はピースのバウンディングボックスの左上)。 */
-export type Move = readonly [trayIndex: number, x: number, y: number];
+/** 1 手 = [x, y](かけらのバウンディングボックスの左上)。手持ちは 1 個なので位置だけでよい。 */
+export type Move = readonly [x: number, y: number];
 
 /** 1 ゲームの手数の上限(暴走・過大な入力の防止)。 */
 export const MAX_REPLAY_MOVES = 2000;
@@ -30,8 +30,8 @@ export function replay(
   let state = newGame(config, mode, seed, 0);
   for (let i = 0; i < moves.length; i++) {
     if (state.status !== "playing") return { ok: false, error: "moves_after_end", at: i };
-    const [t, x, y] = moves[i] as Move;
-    const { state: next, result } = place(state, config, t, x, y);
+    const [x, y] = moves[i] as Move;
+    const { state: next, result } = place(state, config, x, y);
     if (!result.ok) return { ok: false, error: "invalid_move", at: i };
     state = next;
   }

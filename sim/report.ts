@@ -6,8 +6,8 @@ export interface GameOutcome {
   moves: number;
   score: number;
   lines: number;
-  round: number;
-  gameOverAtRound1: boolean;
+  heat: number;
+  gameOverAtMove1: boolean;
   boardClear: boolean;
 }
 
@@ -26,9 +26,9 @@ export interface BotReport {
   moves: Distribution;
   score: Distribution;
   lines: Distribution;
-  round: Distribution;
-  /** 1 ラウンド目で詰んだゲームの割合。fitGuarantee: oneOfThree なら 0 でなければならない。 */
-  gameOverAtRound1: number;
+  heat: Distribution;
+  /** 1 手も置けずに詰んだゲームの割合。逆手では最初のかけらが必ず 1 マスなので 0。 */
+  gameOverAtMove1: number;
   /** 1 回以上全消しが起きたゲームの割合。 */
   boardClear: number;
   elapsedMs: number;
@@ -96,8 +96,8 @@ export function buildBotReport(
     moves: describe(outcomes.map((o) => o.moves)),
     score: describe(outcomes.map((o) => o.score)),
     lines: describe(outcomes.map((o) => o.lines)),
-    round: describe(outcomes.map((o) => o.round)),
-    gameOverAtRound1: games === 0 ? 0 : outcomes.filter((o) => o.gameOverAtRound1).length / games,
+    heat: describe(outcomes.map((o) => o.heat)),
+    gameOverAtMove1: games === 0 ? 0 : outcomes.filter((o) => o.gameOverAtMove1).length / games,
     boardClear: games === 0 ? 0 : round3(outcomes.filter((o) => o.boardClear).length / games),
     elapsedMs: Math.round(elapsedMs),
   };
@@ -132,7 +132,7 @@ const BANDED: ReadonlyArray<[bot: string, key: "moves" | "score", label: string]
 
 export interface CheckResult {
   bands: BandCheck[];
-  /** `*.gameOverAtRound1` が 0 でなかったボット。 */
+  /** `*.gameOverAtMove1` が 0 でなかったボット。 */
   gameOverViolations: string[];
   /** baseline に無い / 今回走らせていないため判定できなかった指標。 */
   skipped: string[];
@@ -166,7 +166,7 @@ export function checkAgainstBaseline(current: SimReport, baseline: SimReport): C
   }
 
   const gameOverViolations = Object.values(current.bots)
-    .filter((b) => b.gameOverAtRound1 !== 0)
+    .filter((b) => b.gameOverAtMove1 !== 0)
     .map((b) => b.bot);
 
   return {
@@ -181,12 +181,11 @@ export function checkAgainstBaseline(current: SimReport, baseline: SimReport): C
  * 実験の treatment を `--variant` で走らせたときの合否(docs/06 §4)。
  * 実験は帯域を外れてよい(外れたら PR 本文に理由を書く)。失敗にするのは
  * **random.median_moves が baseline の 50 % 未満(明らかに壊れている)** ときと、
- * `fitGuarantee: oneOfThree` なのに初手で詰むゲームがあるときだけ。
+ * 初手で詰むゲームがあるときだけ(逆手では起こりえないので、起きたら壊れている)。
  */
-export function variantCheckOk(result: CheckResult, fitGuarantee: string): boolean {
+export function variantCheckOk(result: CheckResult): boolean {
   const fatal = result.bands.some((b) => b.fatal);
-  const roundOne = fitGuarantee === "oneOfThree" && result.gameOverViolations.length > 0;
-  return !fatal && !roundOne;
+  return !fatal && result.gameOverViolations.length === 0;
 }
 
 /* ------------------------------------------------------------------ */
@@ -203,7 +202,7 @@ export function formatReport(report: SimReport): string {
       (report.generatedFrom.variant === null ? "" : ` variant=${report.generatedFrom.variant}`),
   );
   lines.push(
-    `${pad("bot", 11)}${pad("med moves", 11)}${pad("med score", 11)}${pad("med lines", 11)}${pad("med round", 11)}${pad("p10/p90 score", 18)}${pad("over@r1", 9)}${pad("clear", 8)}ms`,
+    `${pad("bot", 11)}${pad("med moves", 11)}${pad("med score", 11)}${pad("med lines", 11)}${pad("med heat", 11)}${pad("p10/p90 score", 18)}${pad("over@m1", 9)}${pad("clear", 8)}ms`,
   );
   for (const bot of Object.values(report.bots)) {
     lines.push(
@@ -211,9 +210,9 @@ export function formatReport(report: SimReport): string {
         pad(String(bot.moves.median), 11) +
         pad(String(bot.score.median), 11) +
         pad(String(bot.lines.median), 11) +
-        pad(String(bot.round.median), 11) +
+        pad(String(bot.heat.median), 11) +
         pad(`${bot.score.p10} / ${bot.score.p90}`, 18) +
-        pad(bot.gameOverAtRound1.toFixed(4), 9) +
+        pad(bot.gameOverAtMove1.toFixed(4), 9) +
         pad(bot.boardClear.toFixed(3), 8) +
         String(bot.elapsedMs),
     );
@@ -233,7 +232,7 @@ export function formatCheck(result: CheckResult): string {
     lines.push(`  SKIP ${metric}(baseline か今回の実行に無い)`);
   }
   for (const bot of result.gameOverViolations) {
-    lines.push(`  NG  ${bot}.gameOverAtRound1 != 0`);
+    lines.push(`  NG  ${bot}.gameOverAtMove1 != 0`);
   }
   lines.push(result.ok ? "帯域内" : "帯域外");
   return lines.join("\n");

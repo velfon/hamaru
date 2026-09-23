@@ -36,7 +36,7 @@ export function clears(bot: Bot, config: ResolvedConfig, level: number, variant:
   for (let i = 0; i < 2000 && s.status === "playing"; i++) {
     const m = bot.chooseMove(s, config, rng);
     if (m === null) break;
-    s = place(s, config, m.trayIndex, m.x, m.y).state;
+    s = place(s, config, m.x, m.y).state;
   }
   return s.status === "cleared";
 }

@@ -14,6 +14,35 @@ export interface Route {
   screen: ScreenFactory;
 }
 
+/**
+ * 初回 JS に載せたくない画面を、開いた時に読み込む(docs/02 §11 N-15)。
+ * 読み込みが終わるまでは何も出ない(ほぼ一瞬)。失敗しても黙って戻る
+ * (版の入れ替え直後など。開き直せば読み込み直す)。
+ */
+export function lazyScreen(
+  container: HTMLElement,
+  query: URLSearchParams,
+  load: () => Promise<ScreenFactory>,
+): Screen {
+  let inner: Screen | null = null;
+  let unmounted = false;
+  void load().then(
+    (factory) => {
+      if (unmounted) return;
+      inner = factory(container, query);
+    },
+    () => {
+      /* 開き直せば読み込み直す */
+    },
+  );
+  return {
+    unmount() {
+      unmounted = true;
+      inner?.unmount();
+    },
+  };
+}
+
 export interface Router {
   start(): void;
   stop(): void;

@@ -3,7 +3,7 @@
  * 言語切替で文言が変わる / テーマ切替 / データ削除で統計が 0。
  */
 import { expect } from "@playwright/test";
-import { dragPiece, grabPiece, test } from "./helpers";
+import { almostFullRow, gotoState, grabPiece, makeState, placeNext, test } from "./helpers";
 
 test("言語を切り替えると文言が変わり、再読み込みしても残る", async ({ page }) => {
   await page.goto("/#/settings");
@@ -46,8 +46,13 @@ test("消去プレビューを OFF にするとハイライトが出ない", asy
   await page.goto("/#/settings");
   await page.getByTestId("setting-preview").uncheck();
 
-  await page.goto("/#/play");
-  const drop = await grabPiece(page, 0, 4, 4);
+  // ON なら 10 マス光る場面(game.spec.ts の対になるテスト)を作り、そこで 0 であることを見る。
+  await gotoState(
+    page,
+    makeState({ board: almostFullRow(), piece: { cells: [[0, 0]], color: 2 } }),
+    "/play",
+  );
+  const drop = await grabPiece(page, 9, 9);
   await expect(page.locator("[data-ghost]").first()).toBeVisible();
   await expect(page.locator('[data-preview="1"]')).toHaveCount(0);
   await drop();
@@ -113,7 +118,7 @@ test("音は既定 OFF。ゲーム画面のボタンで BGM と効果音をま�
 test("データを削除すると統計が 0 に戻る", async ({ page }) => {
   // 1 ゲーム分の記録を作る。
   await page.goto("/#/play");
-  await dragPiece(page, 0, 0, 0);
+  await placeNext(page);
   await page.goto("/");
   await expect(page.getByTestId("endless-restart")).toBeVisible();
 

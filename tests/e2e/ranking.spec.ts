@@ -9,21 +9,22 @@ const deadDaily = () =>
   makeState({
     mode: "daily",
     board: almostDead(),
-    tray: [{ shapeId: "dot" }, { shapeId: "sq2" }, { shapeId: "sq2" }],
+    piece: { cells: [[0, 0]], color: 2 },
+    heat: 2, // 次のかけらは 2 マス → 飛び飛びの空きには置けない = この 1 手で終わる
     score: 3000,
     linesCleared: 12,
   });
 
 test("デイリーの公式記録はゲームオーバーで送信し、順位を出す", async ({ page }) => {
   await gotoState(page, deadDaily(), "/daily");
-  await dragPiece(page, 0, 0, 0);
+  await dragPiece(page, 5, 5);
   const overlay = page.getByTestId("gameover");
   await expect(overlay).toBeVisible({ timeout: 10_000 });
   await expect(page.getByTestId("daily-rank")).toContainText("#12 of 348");
   await expect(page.getByTestId("daily-rank")).toContainText("This week: #3");
 
   const submit = leaderboardPosts(page).find((p) => p.path === "/api/daily/submit");
-  expect(submit?.body["moves"]).toEqual([[0, 0, 0]]);
+  expect(submit?.body["moves"]).toEqual([[5, 5]]);
   expect(submit?.body["date"]).toMatch(/^\d{4}-\d{2}-\d{2}$/);
   expect(submit?.body["installId"]).toMatch(/^[0-9a-f-]{36}$/);
   expect(Object.keys(submit?.body ?? {}).sort()).toEqual(["date", "installId", "moves", "version"]);
@@ -35,7 +36,7 @@ test("デイリーの公式記録はゲームオーバーで送信し、順位�
 test("送信に失敗しても結果は出て、失敗を知らせる", async ({ page }) => {
   await page.route("**/api/daily/submit", (route) => route.fulfill({ status: 500 }));
   await gotoState(page, deadDaily(), "/daily");
-  await dragPiece(page, 0, 0, 0);
+  await dragPiece(page, 5, 5);
   await expect(page.getByTestId("gameover")).toBeVisible({ timeout: 10_000 });
   await expect(page.getByTestId("final-score")).toHaveText("3,001");
   await expect(page.getByTestId("daily-rank")).toHaveText("Couldn't save to the leaderboard");
@@ -99,7 +100,7 @@ test("参加しない設定なら送信せず、ランキング画面にも出�
   await toggle.uncheck({ force: true });
 
   await gotoState(page, deadDaily(), "/daily");
-  await dragPiece(page, 0, 0, 0);
+  await dragPiece(page, 5, 5);
   await expect(page.getByTestId("gameover")).toBeVisible({ timeout: 10_000 });
   await expect(page.getByTestId("daily-rank")).toHaveCount(0);
   expect(leaderboardPosts(page).some((p) => p.path === "/api/daily/submit")).toBe(false);
@@ -110,7 +111,7 @@ test("参加しない設定なら送信せず、ランキング画面にも出�
 
 test("ランキングに記録したことがあれば、データ削除でサーバの記録も消す", async ({ page }) => {
   await gotoState(page, deadDaily(), "/daily");
-  await dragPiece(page, 0, 0, 0);
+  await dragPiece(page, 5, 5);
   await expect(page.getByTestId("daily-rank")).toContainText("#12");
 
   await page.goto("/#/settings");

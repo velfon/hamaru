@@ -18,7 +18,6 @@ import {
   safeParseGameConfig,
 } from "../../src/config/schema";
 import type { Experiment, ExperimentsFile } from "../../src/config/schema";
-import { SHAPE_IDS } from "../../src/core/shapes";
 
 const clone = <T>(v: T): T => structuredClone(v);
 
@@ -26,13 +25,13 @@ const EXP: Experiment = {
   id: "EXP-0003",
   status: "running",
   startedAt: "2026-10-12T00:00:00Z",
-  hypothesis: "pity.threshold を 0.6→0.5 にすると 1 ゲームの長さが伸びる",
+  hypothesis: "かけらの育ちを遅く(growEvery 2→3)すると 1 ゲームの長さが伸びる",
   primaryMetric: "games_per_session",
   guardrails: ["crash_free"],
   minUsersPerArm: 300,
   maxDays: 14,
   allocation: { control: 0.5, treatment: 0.5 },
-  variants: { control: {}, treatment: { pieces: { pity: { threshold: 0.5 } } } },
+  variants: { control: {}, treatment: { sakate: { growEvery: 3 } } },
   lockedInDaily: true,
 };
 
@@ -46,44 +45,11 @@ describe("config / schema", () => {
     const r = safeParseGameConfig(gameConfigJson);
     expect(r.ok, r.ok ? "" : r.error).toBe(true);
     expect(DEFAULT_CONFIG.board.size).toBe(10);
-    expect(DEFAULT_CONFIG.pieces.fitGuarantee).toBe("oneOfThree");
-    expect(DEFAULT_CONFIG.pieces.noTripleDuplicate).toBe(true);
-    expect(DEFAULT_CONFIG.pieces.pity).toEqual({ enabled: true, threshold: 0.6, smallBoost: 1.5 });
-  });
-
-  it("weights は 25 形状すべてを過不足なく持つ", () => {
-    expect(Object.keys(DEFAULT_CONFIG.pieces.weights).sort()).toEqual([...SHAPE_IDS].sort());
-    expect(Object.keys(DEFAULT_CONFIG.pieces.weights)).toHaveLength(25);
-  });
-
-  it("docs/01 §3 の重みと一致", () => {
-    const w = DEFAULT_CONFIG.pieces.weights;
-    expect(w).toEqual({
-      dot: 1.0,
-      h2: 1.0,
-      h3: 1.0,
-      h4: 0.8,
-      h5: 0.5,
-      v2: 1.0,
-      v3: 1.0,
-      v4: 0.8,
-      v5: 0.5,
-      sq2: 1.0,
-      sq3: 0.35,
-      c_ne: 0.7,
-      c_nw: 0.7,
-      c_se: 0.7,
-      c_sw: 0.7,
-      L_ne: 0.45,
-      L_nw: 0.45,
-      L_se: 0.45,
-      L_sw: 0.45,
-      t_n: 0.5,
-      t_e: 0.5,
-      t_s: 0.5,
-      t_w: 0.5,
-      r2x3: 0.4,
-      r3x2: 0.4,
+    expect(DEFAULT_CONFIG.sakate).toEqual({
+      maxPiece: 5,
+      growEvery: 2,
+      window: 3,
+      startTiles: 6,
     });
   });
 
@@ -100,14 +66,14 @@ describe("config / schema", () => {
       return !safeParseGameConfig(c).ok;
     };
 
-    expect(rejects("pieces.pity.threshold", 1.5)).toBe(true);
-    expect(rejects("pieces.pity.threshold", -0.1)).toBe(true);
-    expect(rejects("pieces.pity.smallBoost", 0.5)).toBe(true);
+    expect(rejects("sakate.maxPiece", 0)).toBe(true);
+    expect(rejects("sakate.maxPiece", 10)).toBe(true);
+    expect(rejects("sakate.growEvery", 0)).toBe(true);
     expect(rejects("board.size", 5)).toBe(true);
     expect(rejects("board.size", 13)).toBe(true);
     expect(rejects("board.size", 10.5)).toBe(true);
-    expect(rejects("pieces.weights.dot", 6)).toBe(true);
-    expect(rejects("pieces.weights.dot", -1)).toBe(true);
+    expect(rejects("sakate.startTiles", -1)).toBe(true);
+    expect(rejects("sakate.startTiles", 99)).toBe(true);
     expect(rejects("scoring.streak.max", 0.5)).toBe(true);
     expect(rejects("scoring.streak.step", 2)).toBe(true);
     expect(rejects("scoring.boardClearBonus", -1)).toBe(true);
@@ -118,7 +84,7 @@ describe("config / schema", () => {
     expect(rejects("schemaVersion", 2)).toBe(true);
 
     // 範囲内なら通ることも確認する(テストが常に true にならないように)。
-    expect(rejects("pieces.pity.threshold", 0.5)).toBe(false);
+    expect(rejects("sakate.growEvery", 3)).toBe(false);
     expect(rejects("board.size", 8)).toBe(false);
   });
 
@@ -127,32 +93,30 @@ describe("config / schema", () => {
     expect(safeParseGameConfig({ ...base, extra: 1 }).ok).toBe(false);
     const { fx: _fx, ...missing } = base;
     expect(safeParseGameConfig(missing).ok).toBe(false);
-    const wrongEnum = clone(base) as { pieces: { fitGuarantee: string } };
-    wrongEnum.pieces.fitGuarantee = "always";
+    const wrongEnum = clone(base) as { sakate: { window: number } };
+    wrongEnum.sakate.window = 7;
     expect(safeParseGameConfig(wrongEnum).ok).toBe(false);
     expect(safeParseGameConfig(null).ok).toBe(false);
   });
 
-  it("weights に未知の形状 ID があると落ちる / 形状が欠けても落ちる", () => {
-    const extra = clone(gameConfigJson) as unknown as {
-      pieces: { weights: Record<string, number> };
-    };
-    extra.pieces.weights["zzz"] = 1;
-    expect(safeParseGameConfig(extra).ok).toBe(false);
-
-    const missing = clone(gameConfigJson) as unknown as {
-      pieces: { weights: Record<string, number> };
-    };
-    delete missing.pieces.weights["dot"];
-    expect(safeParseGameConfig(missing).ok).toBe(false);
+  it("sakate の値が範囲外なら落ちる", () => {
+    const bad = clone(gameConfigJson) as unknown as { sakate: Record<string, number> };
+    bad.sakate["maxPiece"] = 20;
+    expect(safeParseGameConfig(bad).ok).toBe(false);
+    const bad2 = clone(gameConfigJson) as unknown as { sakate: Record<string, number> };
+    bad2.sakate["growEvery"] = 0;
+    expect(safeParseGameConfig(bad2).ok).toBe(false);
+    const bad3 = clone(gameConfigJson) as unknown as { sakate: Record<string, number> };
+    bad3.sakate["window"] = 4; // 3 か 5 だけ
+    expect(safeParseGameConfig(bad3).ok).toBe(false);
   });
 
-  it("weights が全て 0 だと落ちる", () => {
-    const zero = clone(gameConfigJson) as unknown as {
-      pieces: { weights: Record<string, number> };
+  it("sakate のキーが欠けたら落ちる", () => {
+    const missing = clone(gameConfigJson) as unknown as {
+      sakate: Record<string, number | undefined>;
     };
-    for (const id of SHAPE_IDS) zero.pieces.weights[id] = 0;
-    expect(safeParseGameConfig(zero).ok).toBe(false);
+    delete missing.sakate["startTiles"];
+    expect(safeParseGameConfig(missing).ok).toBe(false);
   });
 });
 
@@ -208,20 +172,16 @@ describe("config / experiments スキーマ", () => {
 
   it("variants のオーバーライドは config の partial に一致する必要がある", () => {
     expect(configOverrideSchema.safeParse({}).success).toBe(true);
-    expect(configOverrideSchema.safeParse({ pieces: { pity: { threshold: 0.5 } } }).success).toBe(
-      true,
-    );
-    expect(configOverrideSchema.safeParse({ pieces: { weights: { dot: 2 } } }).success).toBe(true);
+    expect(configOverrideSchema.safeParse({ sakate: { growEvery: 3 } }).success).toBe(true);
+    expect(configOverrideSchema.safeParse({ sakate: { maxPiece: 4 } }).success).toBe(true);
     // 範囲外・未知キーは partial でも落ちる。
-    expect(configOverrideSchema.safeParse({ pieces: { pity: { threshold: 5 } } }).success).toBe(
-      false,
-    );
+    expect(configOverrideSchema.safeParse({ sakate: { growEvery: 0 } }).success).toBe(false);
     expect(configOverrideSchema.safeParse({ nope: 1 }).success).toBe(false);
-    expect(configOverrideSchema.safeParse({ pieces: { weights: { zzz: 1 } } }).success).toBe(false);
+    expect(configOverrideSchema.safeParse({ sakate: { zzz: 1 } }).success).toBe(false);
 
     const badVariant = clone(EXP);
     (badVariant.variants as Record<string, unknown>)["treatment"] = {
-      pieces: { pity: { threshold: 9 } },
+      sakate: { growEvery: 99 },
     };
     expect(safeParseExperiments(fileWith(badVariant)).ok).toBe(false);
   });
@@ -241,23 +201,22 @@ describe("config / deepMerge", () => {
   });
 
   it("元のオブジェクトを変更しない", () => {
-    const base = { pieces: { pity: { threshold: 0.6 } } };
-    const merged = deepMerge(base, { pieces: { pity: { threshold: 0.4 } } });
-    expect(base.pieces.pity.threshold).toBe(0.6);
-    expect(merged.pieces.pity.threshold).toBe(0.4);
+    const base = { sakate: { growEvery: 2 } };
+    const merged = deepMerge(base, { sakate: { growEvery: 4 } });
+    expect(base.sakate.growEvery).toBe(2);
+    expect(merged.sakate.growEvery).toBe(4);
   });
 
   it("deep-merge の結果が再検証を通る", () => {
     const merged = deepMerge(clone(DEFAULT_CONFIG), {
-      pieces: { pity: { threshold: 0.5 }, weights: { dot: 2 } },
+      sakate: { growEvery: 3 },
       scoring: { streak: { max: 3 } },
     });
     const r = safeParseGameConfig(merged);
     expect(r.ok, r.ok ? "" : r.error).toBe(true);
     if (r.ok) {
-      expect(r.config.pieces.pity.threshold).toBe(0.5);
-      expect(r.config.pieces.pity.smallBoost).toBe(1.5); // 触っていない値は残る
-      expect(r.config.pieces.weights["dot"]).toBe(2);
+      expect(r.config.sakate.growEvery).toBe(3);
+      expect(r.config.sakate.maxPiece).toBe(5); // 触っていない値は残る
       expect(r.config.scoring.streak.max).toBe(3);
     }
   });
@@ -321,17 +280,17 @@ describe("config / resolveConfig", () => {
     const thresholds = new Set<number>();
     for (let i = 0; i < 200; i++) {
       const r = resolveConfig(DEFAULT_CONFIG, withExp, `install-${i}`, "endless");
-      thresholds.add(r.pieces.pity.threshold);
-      expect(r.pieces.pity.smallBoost).toBe(1.5);
+      thresholds.add(r.sakate.growEvery);
+      expect(r.sakate.maxPiece).toBe(5);
     }
-    expect([...thresholds].sort()).toEqual([0.5, 0.6]);
+    expect([...thresholds].sort()).toEqual([2, 3]);
   });
 
   it("バリアントに応じた値になる", () => {
     const install = "install-1";
     const variant = assignVariant(install, EXP);
     const r = resolveConfig(DEFAULT_CONFIG, withExp, install, "endless");
-    expect(r.pieces.pity.threshold).toBe(variant === "treatment" ? 0.5 : 0.6);
+    expect(r.sakate.growEvery).toBe(variant === "treatment" ? 3 : 2);
     expect(resolveAssignment(withExp, install, "endless")).toEqual({
       exp: "EXP-0003",
       variant,
@@ -341,17 +300,14 @@ describe("config / resolveConfig", () => {
   it("daily + lockedInDaily ではオーバーライドを適用しない", () => {
     for (let i = 0; i < 50; i++) {
       const r = resolveConfig(DEFAULT_CONFIG, withExp, `install-${i}`, "daily");
-      expect(r.pieces.pity.threshold).toBe(0.6);
+      expect(r.sakate.growEvery).toBe(2);
     }
     expect(resolveAssignment(withExp, "install-1", "daily")).toBeNull();
   });
 
-  it("daily では fitGuarantee / pity が強制 OFF", () => {
+  it("daily は base の値そのまま(逆手には強制するものが無い。docs/01 §4.2)", () => {
     const r = resolveConfig(DEFAULT_CONFIG, DEFAULT_EXPERIMENTS, "install-1", "daily");
-    expect(r.pieces.fitGuarantee).toBe("none");
-    expect(r.pieces.pity.enabled).toBe(false);
-    expect(r.pieces.pity.threshold).toBe(0.6); // 他の値は残る
-    expect(DEFAULT_CONFIG.pieces.fitGuarantee).toBe("oneOfThree"); // base は不変
+    expect(r.sakate).toEqual(DEFAULT_CONFIG.sakate);
   });
 
   it("lockedInDaily: false なら daily でもオーバーライドが効くが強制は勝つ", () => {
@@ -361,14 +317,12 @@ describe("config / resolveConfig", () => {
       allocation: { treatment: 1 },
       variants: {
         treatment: {
-          pieces: { fitGuarantee: "oneOfThree", pity: { enabled: true, threshold: 0.5 } },
+          sakate: { growEvery: 4 },
         },
       },
     };
     const r = resolveConfig(DEFAULT_CONFIG, fileWith(exp), "install-1", "daily");
-    expect(r.pieces.pity.threshold).toBe(0.5);
-    expect(r.pieces.fitGuarantee).toBe("none");
-    expect(r.pieces.pity.enabled).toBe(false);
+    expect(r.sakate.growEvery).toBe(4);
   });
 
   it("再検証に失敗したら base にフォールバックして onError を呼ぶ", () => {
@@ -421,15 +375,14 @@ describe("config / resolveConfig", () => {
     for (const status of ["draft", "concluded"] as const) {
       const exp: Experiment = { ...clone(EXP), status };
       const r = resolveConfig(DEFAULT_CONFIG, fileWith(exp), "install-1", "endless");
-      expect(r.pieces.pity.threshold).toBe(0.6);
+      expect(r.sakate.growEvery).toBe(2);
     }
   });
 
   it("forceDaily は入力を変更しない", () => {
     const base = clone(DEFAULT_CONFIG);
     const daily = forceDaily(base);
-    expect(base.pieces.fitGuarantee).toBe("oneOfThree");
-    expect(daily.pieces.fitGuarantee).toBe("none");
+    expect(base.sakate).toEqual(daily.sakate);
   });
 });
 
@@ -486,6 +439,21 @@ describe("config / ブラウザのバンドルに zod を入れない(docs/02 §
       "EXP-0003 / treatment / endless",
       "EXP-0003 / treatment / daily",
     ]);
+  });
+
+  /*
+   * オーバーライドのスキーマは手書きの deep partial(schema.ts)なので、本体のキーを
+   * 変えたときに置き去りになりやすい(実際 `levels.traysPerLine*` が残っていた)。
+   * 「既定値そのものをオーバーライドとして渡せる」ことで、キーの取り違えを検出する。
+   */
+  it("オーバーライドのスキーマは既定 config の全キーを受け取れる", () => {
+    // `audio` は意図的に実験の対象外(docs/10 §5)。
+    const excluded = new Set(["schemaVersion", "audio"]);
+    for (const [section, value] of Object.entries(DEFAULT_CONFIG)) {
+      if (excluded.has(section)) continue;
+      const parsed = configOverrideSchema.safeParse({ [section]: value });
+      expect(parsed.success, `${section}: ${parsed.error?.message ?? ""}`).toBe(true);
+    }
   });
 
   it("allResolutions の結果はすべてスキーマを通る(現在の JSON)", () => {

@@ -3,7 +3,12 @@
 name: CI
 
 on:
+  # ラベルでも走らせる。change-class の承認ラベル(「golden: update」など)は
+  # **実行開始時のイベント payload** から読むので、既定の
+  # opened/synchronize/reopened だけだと「ラベルを付けても再実行で拾えない」
+  # =ラベル承認が成立しない(2026-09-24)。
   pull_request:
+    types: [opened, synchronize, reopened, labeled, unlabeled]
   push:
     branches: [main]
   workflow_dispatch:
@@ -70,7 +75,7 @@ jobs:
   sim:
     name: sim
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -78,8 +83,10 @@ jobs:
           node-version-file: .nvmrc
           cache: npm
       - run: npm ci
-      # G4: 既定 config で帯域検査
-      - run: npm run sim -- --games 2000 --bots random,greedy,lookahead --seed 1 --check
+      # G4: 既定 config で帯域検査。逆手は先読みが本当に効くぶん lookahead が長い
+      # (1 ゲーム 800 手級)ので、速いボットと分けて回数を変える(docs/06 §4)。
+      - run: npm run sim -- --games 2000 --bots random,greedy --seed 1 --check
+      - run: npm run sim -- --games 200 --bots lookahead --seed 1 --check
       # レベル: 面の表が今の config のものか、序盤は greedy・以降は lookahead で解けるか、難易度が単調か(docs/09 §4)
       - run: npm run sim:levels -- --to 200 --check
       # 稼働中の実験があれば各バリアントも走らせる(明らかな破壊だけを落とす。docs/06 §9 N-10)
@@ -93,7 +100,8 @@ jobs:
           if [ -z "$variants" ]; then echo "稼働中の実験はありません"; exit 0; fi
           for v in $variants; do
             echo "::group::variant $v"
-            npm run sim -- --games 2000 --bots random,greedy,lookahead --seed 1 --variant "$v" --check
+            npm run sim -- --games 2000 --bots random,greedy --seed 1 --variant "$v" --check
+            npm run sim -- --games 200 --bots lookahead --seed 1 --variant "$v" --check
             echo "::endgroup::"
           done
 

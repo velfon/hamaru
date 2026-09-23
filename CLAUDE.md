@@ -1,7 +1,9 @@
 # HAMARU — 作業規約(実装者・改善エージェント共通)
 
 ## この リポジトリは何か
-10×10 ブロックはめ込みパズル。Cloudflare Workers で配信、Analytics Engine で計測、
+10×10 のパズル「逆手(さかて)」。**次のかけらは、いま置いた場所のまわりの盤の形が
+そのまま返ってくる**(乱数は開始盤にしか使わない。ルールは `docs/01` §1)。
+Cloudflare Workers で配信、Analytics Engine で計測、
 GitHub Actions 上の Claude が毎日改善する。設計の正本は `docs/`、改善の記憶は `kaizen/`。
 
 ## 最初に読む

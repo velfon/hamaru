@@ -30,7 +30,7 @@ export interface LevelRow {
   /** トレイ上限を切り上げる前の「1 列あたりのトレイ数」。 */
   perLine: number;
   goal: number;
-  trayLimit: number;
+  moveLimit: number;
   obstacles: number;
   greedyClearRate: number;
   greedyStars: number;
@@ -50,7 +50,7 @@ function playLevel(
   for (let i = 0; i < 2000 && state.status === "playing"; i++) {
     const m = bot.chooseMove(state, config, rng);
     if (m === null) break;
-    state = place(state, config, m.trayIndex, m.x, m.y).state;
+    state = place(state, config, m.x, m.y).state;
   }
   return state;
 }
@@ -67,7 +67,7 @@ export function levelCurve(
     const p = levelParams(config.levels, n);
     const variant = table === undefined ? 0 : levelVariant(table, n);
     const l = config.levels;
-    const perLine = Math.max(l.traysPerLineEnd, l.traysPerLineStart - l.traysPerLineStep * (n - 1));
+    const perLine = Math.max(l.movesPerLineEnd, l.movesPerLineStart - l.movesPerLineStep * (n - 1));
     let cleared = 0;
     let stars = 0;
     for (let t = 0; t < trials; t++) {
@@ -81,7 +81,7 @@ export function levelCurve(
       variant,
       perLine,
       goal: p.goal,
-      trayLimit: p.trayLimit,
+      moveLimit: p.moveLimit,
       obstacles: p.obstacles,
       greedyClearRate: cleared / trials,
       greedyStars: stars / trials,
@@ -143,7 +143,7 @@ function main(argv: readonly string[]): number {
   console.log("Lv  var goal trays obst | greedy clear  ★avg | lookahead ★");
   for (const r of rows) {
     console.log(
-      `${String(r.level).padStart(3)} ${String(r.variant).padStart(3)} ${String(r.goal).padStart(4)} ${String(r.trayLimit).padStart(5)} ${String(r.obstacles).padStart(4)} | ` +
+      `${String(r.level).padStart(3)} ${String(r.variant).padStart(3)} ${String(r.goal).padStart(4)} ${String(r.moveLimit).padStart(5)} ${String(r.obstacles).padStart(4)} | ` +
         `${(r.greedyClearRate * 100).toFixed(0).padStart(6)} %  ${r.greedyStars.toFixed(1).padStart(4)} | ${r.lookaheadCleared ? "clear" : "  -  "} ${r.lookaheadStars}`,
     );
   }

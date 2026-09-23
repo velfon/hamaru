@@ -3,9 +3,9 @@
  *
  * レベル N の面は固定シード `level:N` から作るので、全員が同じ面を遊ぶ。
  */
-import { anyFits, createBoard } from "./board";
+import { createBoard, pieceFits } from "./board";
+import { seedPiece } from "./game";
 import { createRng, cyrb53 } from "./rng";
-import { generateTray } from "./tray";
 import {
   OBSTACLE,
   type GameState,
@@ -27,7 +27,7 @@ export function levelSeed(no: number, variant = 0): string {
   return variant <= 0 ? `level:${no}` : `level:${no}:${variant}`;
 }
 
-/** レベル N の目標・トレイ上限・欠片の数(docs/09 §2 の式)。 */
+/** レベル N の目標・手数上限・欠片の数(docs/09 §2 の式)。 */
 export function levelParams(levels: LevelsConfig, no: number): LevelParams {
   const n = Math.max(1, Math.floor(no));
   const goal = Math.min(
@@ -35,17 +35,17 @@ export function levelParams(levels: LevelsConfig, no: number): LevelParams {
     levels.goalBase + Math.floor((n - 1) * levels.goalPerLevel),
   );
   const perLine = Math.max(
-    levels.traysPerLineEnd,
-    levels.traysPerLineStart - levels.traysPerLineStep * (n - 1),
+    levels.movesPerLineEnd,
+    levels.movesPerLineStart - levels.movesPerLineStep * (n - 1),
   );
-  const trayLimit = Math.max(1, Math.ceil(goal * perLine - 1e-9));
+  const moveLimit = Math.max(1, Math.ceil(goal * perLine - 1e-9));
   const obstacles = Math.min(levels.obstaclesMax, Math.floor((n - 1) * levels.obstaclesPerLevel));
-  return { no: n, goal, trayLimit, obstacles };
+  return { no: n, goal, moveLimit, obstacles };
 }
 
 /**
  * 欠片を置いた盤。行や列を満杯にする位置には置かない(開始時に消える列を作らない)。
- * 乱数は面のシードと同じ列から先に使う(その後にトレイを配る)。
+ * 乱数は面のシードから引く(欠片を置いたあと、開始盤のタイルを散らす)。
  */
 function obstacleBoard(size: number, count: number, next: () => number): Uint8Array {
   const board = createBoard(size);
@@ -78,41 +78,38 @@ export function newLevelGame(
   const seed = levelSeed(params.no, variant);
   const rng = createRng(seed);
   const board = obstacleBoard(size, params.obstacles, () => rng.next());
-  const tray = generateTray(rng, board, config);
+  const piece = seedPiece();
   return {
-    version: 1,
+    version: 2,
     mode: "level",
     seed,
-    rng: rng.getState(),
     size,
     board,
-    tray,
+    piece,
+    heat: 0,
     score: 0,
     streak: 0,
     longestStreak: 0,
-    round: 1,
     moves: 0,
     linesCleared: 0,
-    status: anyFits(board, size, tray) ? "playing" : "over",
+    status: pieceFits(board, size, piece) ? "playing" : "over",
     startedAt: now,
-    level: { no: params.no, goal: params.goal, trayLimit: params.trayLimit },
+    level: { no: params.no, goal: params.goal, moveLimit: params.moveLimit },
   };
 }
 
-/** クリアしたときの星(1〜3)。クリアしていなければ 0。 */
+/** クリアしたときの星(1〜3)。少ない手数で解くほど多い。 */
 export function starsFor(state: GameState, levels: LevelsConfig): 0 | 1 | 2 | 3 {
   if (state.status !== "cleared" || state.level === undefined) return 0;
-  const limit = state.level.trayLimit;
-  if (state.round <= Math.ceil(limit * levels.starThree - 1e-9)) return 3;
-  if (state.round <= Math.ceil(limit * levels.starTwo - 1e-9)) return 2;
+  const limit = state.level.moveLimit;
+  if (state.moves <= Math.ceil(limit * levels.starThree - 1e-9)) return 3;
+  if (state.moves <= Math.ceil(limit * levels.starTwo - 1e-9)) return 2;
   return 1;
 }
 
-/** 残りのトレイ数(今のトレイを含む)。 */
-export function traysLeft(state: GameState): number {
-  return state.level === undefined
-    ? Infinity
-    : Math.max(0, state.level.trayLimit - state.round + 1);
+/** 残りの手数。 */
+export function movesLeft(state: GameState): number {
+  return state.level === undefined ? Infinity : Math.max(0, state.level.moveLimit - state.moves);
 }
 
 /** 面の表(`src/config/levels-table.json`)が収録するレベル数。これより先は variant 0。 */
@@ -123,7 +120,7 @@ export const MAX_LEVEL_VARIANTS = 40;
 
 /**
  * 面の表が前提にしている config のハッシュ。面の生成と解けるかどうかに効く部分
- * (盤・ピース・配点・レベル)だけを、キーの順序に依存しない形で固める。
+ * (盤・かけら・配点・レベル)だけを、キーの順序に依存しない形で固める。
  * 値が変わったら `npm run levels:table` で表を作り直す(`validate:config` が検出する)。
  */
 export function levelsConfigHash(config: ResolvedConfig): string {
@@ -138,7 +135,7 @@ export function levelsConfigHash(config: ResolvedConfig): string {
   const payload = JSON.stringify(
     stable({
       board: config.board,
-      pieces: config.pieces,
+      sakate: config.sakate,
       scoring: config.scoring,
       levels: config.levels,
     }),

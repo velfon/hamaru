@@ -20,16 +20,16 @@
 ## 2. 単体テスト(必須項目)
 
 `src/core`:
-- `shapes.test.ts`: 25 形状、ID 一意、原点含有、`w/h` がセルと一致、色がカテゴリ規則に一致。
+- `piece.test.ts`: `normalize` が左上寄せ + 読み順、`largestGroup` が最大連結成分(同数なら読み順で先)、`resize` がちょうど n マスかつ連結を保つ(拡大・縮小の両方)。
 - `rng.test.ts`: 同じシードで同じ列、異なるシードで異なる列(1000 個の先頭 10 値の衝突なし)、状態の保存/復元で継続する。
 - `board.test.ts`: `canPlace` の境界(端・角・重なり)、行列同時消去で交差セルが 1 回だけ消える、消去後に完全行列が残らない。
-- `tray.test.ts`: 重みゼロの形状は出ない、`noTripleDuplicate`、`fitGuarantee: oneOfThree` で少なくとも 1 つ置ける、`pity` で小形状比率が上がる(統計的テスト: 10 000 回で比率が閾値以上)。
+- `derive.test.ts`: `pieceSizeFor` の段(熱 0–1 → 1 マス … 上限で頭打ち)、窓が空なら 1 マス、**置いたマスは窓に入らない**、盤が同じなら同じかけら(決定性)、導いたかけらは必ず連結。
 - `scoring.test.ts`: 表の値(1〜6 列)、ストリーク乗算と上限、全消しボーナス、丸め。
-- `game.test.ts`: `place` の不変性、ゲームオーバー判定、`serialize/deserialize` 往復、壊れた JSON で `null`。
+- `game.test.ts`: `place` の不変性、熱の増減(消したら 0)、次のかけらの大きさ、ゲームオーバー判定、`serialize/deserialize` 往復(version 2)、壊れた JSON で `null`。
 - `daily.test.ts`: 日付→シード、通算番号(epoch = #1)、UTC 境界。
 
 `src/config`:
-- 既定 JSON がスキーマを通る。範囲外(例 `threshold: 1.5`)が落ちる。`running` 実験が 2 つで落ちる。deep-merge の結果が再検証を通る。`assignVariant` の分布が allocation ±2 % 以内(10 万 install)。
+- 既定 JSON がスキーマを通る。範囲外(例 `maxPiece: 99`)が落ちる。`running` 実験が 2 つで落ちる。deep-merge の結果が再検証を通る。`assignVariant` の分布が allocation ±2 % 以内(10 万 install)。
 
 `src/telemetry` / `worker`: [04 §9](04-telemetry-and-metrics.md)。
 
@@ -37,7 +37,7 @@
 
 ## 3. 黄金テスト(決定性)
 
-- `tests/unit/golden/daily-2026-10-01.json`: シード `daily:2026-10-01` で `newGame` → 固定の操作列(50 手)を適用した後の `board`、`score`、`tray`、`rng` を保存。
+- `tests/unit/golden/daily-2026-10-01.json`: シード `daily:2026-10-01` で `newGame` → 固定の操作列(50 手)を適用した後の `board`、`score`、`piece`、`heat`、`moves` を保存。
 - `tests/unit/golden/endless-seed-42.json`: 同様。
 - 不一致 = **ルールが変わった**ということ。意図的な場合は PR に `golden: update` ラベルを付け、`npm run golden:update` で更新し、`kaizen/CHANGELOG.md` に「ルール変更」と明記する。bot はこのラベルを付けられない(05 §5)。
 
@@ -48,13 +48,18 @@
 |---|---|---|
 | `random` | 置ける手からランダム | 下限。ルールの生存性(初手ゲームオーバー率) |
 | `greedy` | 1 手の得点最大 + 消去優先、同点なら盤中央から遠い順 | 平均的な人間の近似 |
-| `lookahead` | トレイ 3 つの順列 6 通りを試し合計得点最大(深さ 3) | 上限の近似 |
+| `lookahead` | 深さ 3 のビーム探索(各手で上位 8 候補だけ展開)。逆手は次のかけらが盤から決まるので、**先読みが本当に効く** | 上限の近似 |
 
 ### 実行
 ```
 npm run sim -- --games 2000 --bots random,greedy,lookahead --seed 1 [--config path] [--variant treatment]
 ```
-出力 `sim/out/<name>.json`: 各ボットの `moves` / `score` / `lines` / `round` の平均・中央値・p10・p90、`gameOverAtRound1` 率、`boardClear` 率、実行時間。
+
+逆手では先読みが本当に効くので、`lookahead` は 1 ゲームが 800 手級になり、他の 2 つより
+2 桁遅い(実測 0.7 秒 / ゲーム)。**baseline は 3 ボットとも 2000 ゲームで作る**が、
+CI は速いボットと分けて回数を変える(`random,greedy` を 2000、`lookahead` を 200)。
+`--check` は baseline に無いボットを飛ばすので、分けて回しても同じ帯域で判定される。
+出力 `sim/out/<name>.json`: 各ボットの `moves` / `score` / `lines` / `heat` の平均・中央値・p10・p90、`gameOverAtMove1` 率、`boardClear` 率、実行時間。
 
 ### 帯域(`sim/baseline.json`、制御群の既定 config で生成)
 | 指標 | 判定 |
@@ -63,7 +68,7 @@ npm run sim -- --games 2000 --bots random,greedy,lookahead --seed 1 [--config pa
 | `greedy.median_moves` | baseline ± 30 % |
 | `greedy.median_score` | baseline ± 30 % |
 | `lookahead.median_moves` | baseline ± 30 % |
-| `*.gameOverAtRound1` | = 0(`fitGuarantee: oneOfThree` の場合) |
+| `*.gameOverAtMove1` | = 0(最初のかけらは必ず 1 マスなので、0 でなければ壊れている) |
 | クラッシュ / 例外 | 0 |
 
 実験 PR は **両バリアントで sim を実行**し、treatment が帯域外なら PR 本文に理由を書き `sim-baseline: update` は付けない(実験なので baseline は変えない)。treatment が `random.median_moves` を baseline の 50 % 未満にする変更は**即失敗**(明らかに壊れている)。
@@ -72,12 +77,13 @@ npm run sim -- --games 2000 --bots random,greedy,lookahead --seed 1 [--config pa
 
 | シナリオ | 内容 |
 |---|---|
-| `smoke` | ホーム表示 → エンドレス開始 → ピースをドラッグして配置 → スコア増加 |
+| `smoke` | ホーム表示 → エンドレス開始 → かけらをドラッグして配置 → スコア増加 |
 | `clear` | 用意した状態(テスト用 `?state=` パラメータ、開発ビルドのみ)から 1 列消去 → 演出後に空セル |
 | `gameover` | 詰みの状態から配置 → オーバーレイ → 「もう一度」で新規 |
 | `resume` | 数手置いてリロード → 「続きから」で盤が復元 |
 | `daily` | デイリー開始 → 終了 → 結果カード → 共有(クリップボード権限をモック) → ホームに「達成」 |
-| `keyboard` | キーボードのみで 1 ピース配置 |
+| `keyboard` | キーボードのみで 1 かけら配置(矢印 → Enter。選ぶ操作は無い) |
+| `howto` | ホームから遊び方を開き、1 手置くと盤と手持ちが変わる / おまかせ・はじめから / **初回だけ**ゲームの前に挟まる |
 | `settings` | 言語切替で文言変更、テーマ切替、データ削除で統計が 0 |
 | `telemetry` | `/api/events` へのリクエストに `game_start` / `game_end` が含まれ、スキーマ検証を通る |
 | `offline` | SW 登録後にオフラインでリロードして起動 |
@@ -99,8 +105,8 @@ npm run sim -- --games 2000 --bots random,greedy,lookahead --seed 1 [--config pa
 
 | 分類 | ケース |
 |---|---|
-| 空入力 | 盤が空で 3×3 を置く / トレイが全 null になった直後 / localStorage が空 |
-| 境界 | (9,9) に dot / `h5` を x=5 と x=6 / 10 列同時に埋まる状態からの配置 / スコアが 2^31 を超えない前提の確認(number なので問題ないがテストで明示) |
+| 空入力 | 盤が空で 1 マスを置く(窓が空 → 次も 1 マス) / 全消し直後 / localStorage が空 |
+| 境界 | (9,9) に 1 マス / 横 5 マスを x=5 と x=6 / 10 列同時に埋まる状態からの配置 / スコアが 2^31 を超えない前提の確認(number なので問題ないがテストで明示) |
 | エラー経路 | 壊れた保存データ / config の deep-merge で不正値 / `/api/events` が 500 を返す / `navigator.share` が reject / `vibrate` 未定義 |
 | 時間 | UTC 日付境界でのデイリー / 途中で日付が変わる / 端末時計が過去 |
 | 入力 | ドラッグ中の `pointercancel` / 二本目の指 / 盤外ドロップ / 画面回転 |
@@ -110,8 +116,8 @@ npm run sim -- --games 2000 --bots random,greedy,lookahead --seed 1 [--config pa
 ### N-1. `sim/out/<name>.json` の `<name>` はボット名(§4)
 1 回の実行で走らせたボットごとに `sim/out/random.json` / `greedy.json` / `lookahead.json` を書く。
 各ファイルには実行条件(config パス・variant・seed・games)と、そのボットの
-`moves` / `score` / `lines` / `round` の mean・median・p10・p90・min・max、
-`gameOverAtRound1` 率、`boardClear` 率、実行時間 (ms) が入る。
+`moves` / `score` / `lines` / `heat` の mean・median・p10・p90・min・max、
+`gameOverAtMove1` 率、`boardClear` 率、実行時間 (ms) が入る。
 `sim/out/` は `.gitignore` 済み(生成物)。`sim/baseline.json` だけがコミット対象。
 
 ### N-2. baseline の生成は `--write-baseline`(§4)
@@ -120,9 +126,12 @@ npm run sim -- --games 2000 --bots random,greedy,lookahead --seed 1 [--config pa
 `npm run sim -- --games 2000 --bots random,greedy,lookahead --seed 1 --write-baseline` で生成している。
 `sim-baseline: update` ラベルの付いた PR だけがこのファイルを更新してよい。
 
-### N-3. `gameOverAtRound1` の定義(§4)
-「ゲームが `round === 1` のまま終了した割合」とした。
-= 最初のトレイ 3 つを置き切れずに詰んだ割合。`fitGuarantee: "oneOfThree"` なら 0 になる。
+### N-3. `gameOverAtMove1` の定義(§4)
+「1 手も置けずに終了した割合」(`state.moves === 0`)。逆手では最初のかけらが必ず 1 マスで、
+開始盤も最大 `startTiles` マスしか埋まっていないので**常に 0** になる。
+0 でなければルールか開始盤の生成が壊れている。
+(旧ルールでは `round === 1` のまま終わった割合 = `gameOverAtRound1` だった。
+逆手にラウンドという単位が無くなったので 2026-09-24 に改名した。)
 
 ### N-4. ボットの評価関数は core の `place` を使わない(§4)
 候補手は 1 ゲームあたり数万回評価するため、`sim/evaluate.ts` に
@@ -157,7 +166,7 @@ Service Worker の制御は Chromium のみで検査する(WebKit は §5 の「
 ### N-8. E2E のドラッグは常に `page.mouse`(§5)
 Pixel 7 / iPhone 15 のエミュレーションでも Pointer Events は発火するため、
 ドラッグ補助(`tests/e2e/helpers.ts`)はマウスで統一している。
-このため `config.input.touchLiftOffset`(指の上にピースを持ち上げる量)は E2E では効かず、
+このため `config.input.touchLiftOffset`(指の上にかけらを持ち上げる量)は E2E では効かず、
 **実機のタッチ操作は手動確認**に残る(§5 のデバイス一覧は画面サイズの検証として機能している)。
 
 ### N-9. E2E は全テストで `/api/events` を横取りしてスキーマ検証する(§5)
@@ -169,10 +178,25 @@ WebKit では sendBeacon の Blob 本文を Playwright が読めない(`postData
 
 ### N-10. G4 の実験バリアントは「明らかな破壊」だけを落とす(§4)
 `npm run sim -- --variant <name> --check` は帯域外でも失敗にしない(実験なので帯域を外れてよい)。
-失敗にするのは **random.median_moves が baseline の 50 % 未満**と、**`fitGuarantee: oneOfThree` なのに初手で詰む**ときだけ
+失敗にするのは **random.median_moves が baseline の 50 % 未満**と、**初手で詰むゲームがある**ときだけ
 (`sim/report.ts` の `variantCheckOk`)。
 
 ### N-11. Lighthouse CI の設定(§6)
 `lighthouserc.json`。モバイルは Lighthouse の既定(`preset` を指定しない)。`vite preview` の本番ビルドに対して
 `/` と `/#/play` を 3 回ずつ測り、中央値で判定する。lhci はハッシュ違いの URL を同じ URL として集計するので、
 アサーションは実質 1 URL・6 回分の中央値になる。`@lhci/cli` は依存に入れず、CI で `npx @lhci/cli@0.15.1` を使う。
+
+### N-11. 遊び方はルートではなくホームのボタンで挟む(2026-09-24、docs/01 §9.7)
+初回導線を `#/play` のルート側に置いたら、LCP が **1.39 → 1.65 秒**に落ちて §6 の予算(1500 ms)を割った。
+Lighthouse は毎回まっさらなプロファイルで走るので、`#/play` の計測がまるごと遊び方の画面の計測になり、
+その遅延読み込み(画面 + 文言)がそのまま LCP になっていた。
+
+ついでに分かったこと: **この予算の余裕は 1 往復ぶんも無い**。
+シミュレート回線では初回ペイロードが約 500 バイト増えるだけで往復境界をまたぎ、LCP が 150 ms 跳ねる
+(実測: 遊び方の文言 14 キー × 2 言語 ≒ 1 KB を常時読み込みの i18n に入れただけで 1.39 → 1.54 秒)。
+したがって:
+
+- **長い文章を `src/i18n/{ja,en}.json` に足さない**。画面ごとの遅延ファイル(`about.*` / `howto.*`)に置く。
+  この 2 つは**両言語ぶんが常に初回 JS に入る**ので、1 行足すと 2 行ぶん重くなる
+- 1 人 1 回しか開かない画面(About・遊び方)は**画面のモジュールごと遅延**させる
+- 予算を触る前に、まず初回ペイロードが増えていないかを疑う

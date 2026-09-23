@@ -5,7 +5,7 @@
  * **盤を書き換えて元に戻す**非確保の評価関数を使う。結果は core と一致する。
  */
 import { scorePlacement } from "../src/core/scoring";
-import type { Board, ScoringConfig, Shape } from "../src/core/types";
+import type { Board, Piece, ScoringConfig } from "../src/core/types";
 
 export interface MoveValue {
   /** この配置で得られる得点(ストリーク倍率・全消しボーナス込み)。 */
@@ -13,6 +13,17 @@ export interface MoveValue {
   /** 同時に消える行数 + 列数。 */
   lines: number;
   boardCleared: boolean;
+}
+
+/** かけらの幅と高さ。 */
+function bounds(piece: Piece): { w: number; h: number } {
+  let w = 0;
+  let h = 0;
+  for (const [x, y] of piece.cells) {
+    if (x + 1 > w) w = x + 1;
+    if (y + 1 > h) h = y + 1;
+  }
+  return { w, h };
 }
 
 /** 盤の埋まっているセル数。 */
@@ -46,39 +57,40 @@ function colFull(board: Board, size: number, x: number): boolean {
 export function evaluateMove(
   board: Board,
   size: number,
-  shape: Shape,
+  piece: Piece,
   x: number,
   y: number,
   scoring: ScoringConfig,
   streakBefore: number,
   filledBefore: number,
 ): MoveValue {
-  for (const [dx, dy] of shape.cells) {
-    board[(y + dy) * size + (x + dx)] = shape.color;
+  for (const [dx, dy] of piece.cells) {
+    board[(y + dy) * size + (x + dx)] = piece.color;
   }
 
+  const { w, h } = bounds(piece);
   let rows = 0;
   let cols = 0;
-  for (let dy = 0; dy < shape.h; dy++) {
+  for (let dy = 0; dy < h; dy++) {
     if (rowFull(board, size, y + dy)) rows++;
   }
-  for (let dx = 0; dx < shape.w; dx++) {
+  for (let dx = 0; dx < w; dx++) {
     if (colFull(board, size, x + dx)) cols++;
   }
 
-  for (const [dx, dy] of shape.cells) {
+  for (const [dx, dy] of piece.cells) {
     board[(y + dy) * size + (x + dx)] = 0;
   }
 
   const lines = rows + cols;
-  const filledAfter = filledBefore + shape.cells.length;
+  const filledAfter = filledBefore + piece.cells.length;
   const clearedCells = rows * size + cols * size - rows * cols;
   const boardCleared = lines > 0 && filledAfter - clearedCells === 0;
   const streakAfter = lines > 0 ? streakBefore + 1 : 0;
 
   return {
     score: scorePlacement(
-      { cellCount: shape.cells.length, lines, streakAfter, boardCleared },
+      { cellCount: piece.cells.length, lines, streakAfter, boardCleared },
       scoring,
     ),
     lines,
@@ -93,19 +105,20 @@ export function evaluateMove(
 export function applyMoveInPlace(
   board: Board,
   size: number,
-  shape: Shape,
+  piece: Piece,
   x: number,
   y: number,
 ): { lines: number; filled: number } {
-  for (const [dx, dy] of shape.cells) {
-    board[(y + dy) * size + (x + dx)] = shape.color;
+  for (const [dx, dy] of piece.cells) {
+    board[(y + dy) * size + (x + dx)] = piece.color;
   }
+  const { w, h } = bounds(piece);
   const rows: number[] = [];
   const cols: number[] = [];
-  for (let dy = 0; dy < shape.h; dy++) {
+  for (let dy = 0; dy < h; dy++) {
     if (rowFull(board, size, y + dy)) rows.push(y + dy);
   }
-  for (let dx = 0; dx < shape.w; dx++) {
+  for (let dx = 0; dx < w; dx++) {
     if (colFull(board, size, x + dx)) cols.push(x + dx);
   }
   for (const ry of rows) {

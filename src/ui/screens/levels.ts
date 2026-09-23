@@ -28,7 +28,7 @@ export function levelsScreen(container: HTMLElement): Screen {
         "data-testid": `level-${n}`,
         "aria-label": locked
           ? `${t("level.tag", { n })} ${t("levels.locked")}`
-          : `${t("level.tag", { n })} ${t("levels.goal", { goal: p.goal, trays: p.trayLimit })}${done ? ` ${t("level.stars", { n: done.stars })}` : ""}`,
+          : `${t("level.tag", { n })} ${t("levels.goal", { goal: p.goal, moves: p.moveLimit })}${done ? ` ${t("level.stars", { n: done.stars })}` : ""}`,
         ...(locked ? { disabled: "" } : {}),
       },
       [

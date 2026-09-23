@@ -1,67 +1,53 @@
 /**
- * lookahead ボット(docs/06 §4)。
- * トレイ 3 つの順列(最大 6 通り)を試し、各順列を greedy に置いたときの
- * 合計得点が最大になる順列の **最初の手** を選ぶ(深さ 3)。上限の近似。
+ * lookahead ボット(docs/06 §4)。逆手の「上手い人」の近似。
+ *
+ * greedy に加えて、**derive された次のかけらを実際に置いてみる**(1 手先)。
+ * 逆手では次に来る形が自分の手で決まるので、ここを読めるかどうかが腕の差になる。
  */
-import type { Rng } from "../../src/core/rng";
+import { validPositions } from "../../src/core/board";
+import { countFilled } from "../evaluate";
 import type { GameState, ResolvedConfig } from "../../src/core/types";
-import { applyMoveInPlace, countFilled } from "../evaluate";
-import { getShape } from "../../src/core/shapes";
-import { bestMove } from "./greedy";
+import { simulate } from "./greedy";
 import type { Bot, Move } from "./types";
-import { trayPieces } from "./types";
 
-type TrayEntry = { trayIndex: number; shapeId: string };
-
-/** 要素数 <= 3 の全順列。 */
-export function permutations<T>(items: readonly T[]): T[][] {
-  if (items.length <= 1) return [[...items]];
-  const out: T[][] = [];
-  for (let i = 0; i < items.length; i++) {
-    const head = items[i] as T;
-    const rest = [...items.slice(0, i), ...items.slice(i + 1)];
-    for (const tail of permutations(rest)) out.push([head, ...tail]);
-  }
-  return out;
-}
+/** 2 手目まで読む候補の数(全部読むと遅すぎる)。 */
+const BEAM = 8;
 
 export const lookaheadBot: Bot = {
   name: "lookahead",
-  chooseMove(state: GameState, config: ResolvedConfig, _rng: Rng): Move | null {
-    const tray: TrayEntry[] = [...trayPieces(state)];
-    if (tray.length === 0) return null;
+  chooseMove(state: GameState, config: ResolvedConfig): Move | null {
+    // 1 手目の価値で候補を絞ってから、上位だけ 2 手目を読む(ビーム探索)。
+    const first = validPositions(state.board, state.size, state.piece).map(([x, y]) => {
+      const sim = simulate(state, config, x, y);
+      return {
+        x,
+        y,
+        sim,
+        value: sim.lines * 120 - sim.next.cells.length * 5 - countFilled(sim.board) * 0.4,
+      };
+    });
+    if (first.length === 0) return null;
+    first.sort((a, b) => b.value - a.value);
 
-    const size = state.size;
-    const scratch = new Uint8Array(state.board.length);
-
-    let bestTotal = -1;
-    let bestFirst: Move | null = null;
-
-    for (const order of permutations(tray)) {
-      scratch.set(state.board);
-      let filled = countFilled(scratch);
-      let streak = state.streak;
-      let total = 0;
-      let first: Move | null = null;
-
-      for (const entry of order) {
-        const move = bestMove(scratch, size, [entry], config, streak, filled);
-        if (move === null) break; // この順列では置けない。ここまでの合計で評価する。
-        if (first === null) first = { trayIndex: move.trayIndex, x: move.x, y: move.y };
-        total += move.score;
-        const shape = getShape(entry.shapeId);
-        /* c8 ignore next */
-        if (shape === undefined) break;
-        const applied = applyMoveInPlace(scratch, size, shape, move.x, move.y);
-        streak = applied.lines > 0 ? streak + 1 : 0;
-        filled = applied.filled;
+    let best: { x: number; y: number; value: number } | null = null;
+    for (const candidate of first.slice(0, BEAM)) {
+      const after: GameState = {
+        ...state,
+        board: candidate.sim.board,
+        piece: candidate.sim.next,
+        heat: candidate.sim.heat,
+        moves: state.moves + 1,
+      };
+      let bestNext = -Infinity;
+      for (const [x2, y2] of validPositions(candidate.sim.board, state.size, candidate.sim.next)) {
+        const second = simulate(after, config, x2, y2);
+        const v =
+          second.lines * 120 - second.next.cells.length * 5 - countFilled(second.board) * 0.4;
+        if (v > bestNext) bestNext = v;
       }
-
-      if (first !== null && total > bestTotal) {
-        bestTotal = total;
-        bestFirst = first;
-      }
+      const value = candidate.value + (bestNext === -Infinity ? -800 : bestNext * 0.7);
+      if (best === null || value > best.value) best = { x: candidate.x, y: candidate.y, value };
     }
-    return bestFirst;
+    return best === null ? null : { x: best.x, y: best.y };
   },
 };

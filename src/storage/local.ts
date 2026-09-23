@@ -26,6 +26,8 @@ export const KEYS = {
   levels: "levels",
   /** 途中のレベルのゲーム。 */
   gameLevel: "game:level",
+  /** 遊び方の画面を一度見た(docs/01 §9.7)。初回だけ自動で開くための印。 */
+  howtoSeen: "howto:seen",
 } as const;
 
 export type StorageKey = (typeof KEYS)[keyof typeof KEYS];
@@ -386,18 +388,18 @@ export interface SavedGame {
   isPractice?: boolean;
   /** 集計済みのアクティブ時間(ms)。 */
   activeMs?: number;
-  /** デイリーのみ: 置いた手の列 [トレイ, x, y](ランキングの送信用。docs/08 §2)。 */
-  moves?: Array<[number, number, number]>;
+  /** デイリーのみ: 置いた手の列 [x, y](ランキングの送信用。docs/08 §2)。 */
+  moves?: Array<[number, number]>;
 }
 
-function pickMoves(v: unknown): Array<[number, number, number]> | undefined {
+function pickMoves(v: unknown): Array<[number, number]> | undefined {
   if (!Array.isArray(v)) return undefined;
-  const out: Array<[number, number, number]> = [];
+  const out: Array<[number, number]> = [];
   for (const m of v) {
-    if (!Array.isArray(m) || m.length !== 3 || !m.every((n) => Number.isInteger(n) && n >= 0)) {
+    if (!Array.isArray(m) || m.length !== 2 || !m.every((n) => Number.isInteger(n) && n >= 0)) {
       return undefined;
     }
-    out.push([m[0] as number, m[1] as number, m[2] as number]);
+    out.push([m[0] as number, m[1] as number]);
   }
   return out;
 }
@@ -493,4 +495,17 @@ export function unlockedLevel(progress: LevelProgress): number {
 
 export function totalStars(progress: LevelProgress): number {
   return Object.values(progress).reduce((s, r) => s + r.stars, 0);
+}
+
+/* ------------------------------------------------------------------ */
+/* 遊び方(docs/01 §9.7)                                               */
+/* ------------------------------------------------------------------ */
+
+/** 遊び方の画面を一度でも開いたか。 */
+export function hasSeenHowto(): boolean {
+  return readKey<boolean>(KEYS.howtoSeen, (data) => (data === true ? true : null)) === true;
+}
+
+export function markHowtoSeen(): void {
+  writeKey(KEYS.howtoSeen, true);
 }

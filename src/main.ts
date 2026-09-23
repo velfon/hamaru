@@ -19,7 +19,7 @@ import {
 } from "./storage/local";
 import { detectPlatform, getQueue, initTelemetry, track, updateContext } from "./telemetry/client";
 import { initVitals } from "./telemetry/vitals";
-import { createRouter, type Route } from "./ui/router";
+import { createRouter, lazyScreen, type Route } from "./ui/router";
 import { aboutScreen } from "./ui/screens/about";
 import { gameScreen } from "./ui/screens/game";
 import { levelScreen } from "./ui/screens/level";
@@ -156,6 +156,12 @@ function boot(): void {
     { path: "/daily", screen: gameScreen("daily") },
     { path: "/settings", screen: (container) => settingsScreen(container) },
     { path: "/about", screen: (container) => aboutScreen(container) },
+    // 遊び方は 1 人 1 回しか通らないので、初回 JS には載せない(docs/02 §11 N-15)。
+    {
+      path: "/howto",
+      screen: (container, query) =>
+        lazyScreen(container, query, () => import("./ui/screens/howto").then((m) => m.howtoScreen)),
+    },
     { path: "/ranking", screen: rankingScreen },
     { path: "/levels", screen: (container) => levelsScreen(container) },
     { path: "/level", screen: levelScreen },

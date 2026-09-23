@@ -26,7 +26,7 @@ export function streakMultiplier(s: number, step: number, max: number): number {
 }
 
 export interface ScoreInput {
-  /** 置いたピースのセル数。 */
+  /** 置いたかけらのセル数。 */
   cellCount: number;
   /** 同時に消えた行数 + 列数。 */
   lines: number;

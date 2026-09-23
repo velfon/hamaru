@@ -14,7 +14,7 @@ export const GOLDEN_TARGETS: readonly GoldenTarget[] = [
   { file: "endless-seed-42.json", mode: "endless", seed: "42" },
 ];
 
-/** デイリーは fitGuarantee / pity が強制 OFF になる(docs/01 §4.2)。 */
+/** デイリーの強制(docs/01 §4.2)。逆手では今のところ base と同じ。 */
 export function configForTarget(base: ResolvedConfig, target: GoldenTarget): ResolvedConfig {
   return target.mode === "daily" ? forceDaily(base) : base;
 }

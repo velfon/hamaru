@@ -9,11 +9,11 @@ const deadDaily = () =>
   makeState({
     mode: "daily",
     board: almostDead(),
-    tray: [{ shapeId: "dot" }, { shapeId: "sq2" }, { shapeId: "sq2" }],
+    piece: { cells: [[0, 0]], color: 2 },
+    heat: 2, // 次のかけらは 2 マス → 飛び飛びの空きには置けない = この 1 手で終わる
     score: 3000,
     linesCleared: 12,
     longestStreak: 3,
-    round: 9,
     moves: 40,
   });
 
@@ -41,7 +41,7 @@ test("daily: 終了 → 共有(share)→ ホームに達成が出る", async ({ 
   });
 
   await gotoState(page, deadDaily(), "/daily");
-  await dragPiece(page, 0, 0, 0);
+  await dragPiece(page, 5, 5);
 
   const overlay = page.getByTestId("gameover");
   await expect(overlay).toBeVisible({ timeout: 10_000 });
@@ -78,7 +78,7 @@ test("daily: navigator.share が無ければクリップボードにコピーし
   });
 
   await gotoState(page, deadDaily(), "/daily");
-  await dragPiece(page, 0, 0, 0);
+  await dragPiece(page, 5, 5);
   const overlay = page.getByTestId("gameover");
   await expect(overlay).toBeVisible({ timeout: 10_000 });
   await overlay.getByTestId("share").click();
@@ -100,7 +100,7 @@ test("daily: 達成後も何度でも挑戦でき、記録はその日のベス�
     });
   });
   await gotoState(page, deadDaily(), "/daily");
-  await dragPiece(page, 0, 0, 0);
+  await dragPiece(page, 5, 5);
   const overlay = page.getByTestId("gameover");
   await expect(overlay).toBeVisible({ timeout: 10_000 });
 
@@ -116,7 +116,7 @@ test("daily: 達成後も何度でも挑戦でき、記録はその日のベス�
   await expect(page.getByTestId("score")).toHaveText("0");
 
   // 遊び直しても、その日のベストは残っている(更新は saveDailyResult の単体テスト)
-  await dragPiece(page, 0, 0, 0);
+  await dragPiece(page, 5, 5);
   const stored = await page.evaluate(() => localStorage.getItem("hamaru:v1:daily:results"));
   expect(stored).toContain('"score":3001');
 });

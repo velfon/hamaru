@@ -3,9 +3,8 @@ import { DEFAULT_CONFIG } from "../../src/config";
 import { canPlace, createBoard, validPositions } from "../../src/core/board";
 import { newGame, place } from "../../src/core/game";
 import { createRng } from "../../src/core/rng";
-import { getShape } from "../../src/core/shapes";
-import { greedyBot, distanceFromCenter } from "../../sim/bots/greedy";
-import { lookaheadBot, permutations } from "../../sim/bots/lookahead";
+import { greedyBot, simulate, valueOf } from "../../sim/bots/greedy";
+import { lookaheadBot } from "../../sim/bots/lookahead";
 import { randomBot } from "../../sim/bots/random";
 import type { Bot } from "../../sim/bots/types";
 import { countFilled, evaluateMove } from "../../sim/evaluate";
@@ -54,16 +53,16 @@ describe("sim / report の統計", () => {
 
   it("buildBotReport は率を 0〜1 で出す", () => {
     const outcomes: GameOutcome[] = [
-      { moves: 10, score: 100, lines: 2, round: 4, gameOverAtRound1: false, boardClear: true },
-      { moves: 20, score: 200, lines: 4, round: 8, gameOverAtRound1: true, boardClear: false },
+      { moves: 10, score: 100, lines: 2, heat: 4, gameOverAtMove1: false, boardClear: true },
+      { moves: 20, score: 200, lines: 4, heat: 8, gameOverAtMove1: true, boardClear: false },
     ];
     const r = buildBotReport("x", outcomes, 123);
     expect(r.games).toBe(2);
-    expect(r.gameOverAtRound1).toBe(0.5);
+    expect(r.gameOverAtMove1).toBe(0.5);
     expect(r.boardClear).toBe(0.5);
     expect(r.moves.median).toBe(15);
     expect(r.elapsedMs).toBe(123);
-    expect(buildBotReport("x", [], 0).gameOverAtRound1).toBe(0);
+    expect(buildBotReport("x", [], 0).gameOverAtMove1).toBe(0);
   });
 });
 
@@ -79,8 +78,8 @@ describe("sim / 帯域判定", () => {
             moves,
             score,
             lines: 0,
-            round: 1,
-            gameOverAtRound1: overAtR1 > 0,
+            heat: 1,
+            gameOverAtMove1: overAtR1 > 0,
             boardClear: false,
           },
         ],
@@ -88,12 +87,12 @@ describe("sim / 帯域判定", () => {
       ),
       greedy: buildBotReport(
         "greedy",
-        [{ moves, score, lines: 0, round: 1, gameOverAtRound1: false, boardClear: false }],
+        [{ moves, score, lines: 0, heat: 1, gameOverAtMove1: false, boardClear: false }],
         0,
       ),
       lookahead: buildBotReport(
         "lookahead",
-        [{ moves, score, lines: 0, round: 1, gameOverAtRound1: false, boardClear: false }],
+        [{ moves, score, lines: 0, heat: 1, gameOverAtMove1: false, boardClear: false }],
         0,
       ),
     },
@@ -120,23 +119,22 @@ describe("sim / 帯域判定", () => {
     expect(r.bands.find((b) => b.metric === "random.median_moves")?.fatal).toBe(true);
   });
 
-  it("gameOverAtRound1 != 0 は帯域内でも失敗", () => {
+  it("gameOverAtMove1 != 0 は帯域内でも失敗", () => {
     const r = checkAgainstBaseline(report(100, 1000, 1), report(100, 1000));
     expect(r.ok).toBe(false);
     expect(r.gameOverViolations).toEqual(["random"]);
   });
 
-  it("variant は帯域外でもよいが、50 % 未満の破壊と(oneOfThree での)初手詰みは落とす", () => {
+  it("variant は帯域外でもよいが、50 % 未満の破壊と初手詰みは落とす", () => {
     const outOfBand = checkAgainstBaseline(report(69, 1000), report(100, 1000));
     expect(outOfBand.ok).toBe(false);
-    expect(variantCheckOk(outOfBand, "oneOfThree")).toBe(true);
+    expect(variantCheckOk(outOfBand)).toBe(true);
 
     const broken = checkAgainstBaseline(report(40, 1000), report(100, 1000));
-    expect(variantCheckOk(broken, "oneOfThree")).toBe(false);
+    expect(variantCheckOk(broken)).toBe(false);
 
-    const roundOne = checkAgainstBaseline(report(100, 1000, 1), report(100, 1000));
-    expect(variantCheckOk(roundOne, "oneOfThree")).toBe(false);
-    expect(variantCheckOk(roundOne, "none")).toBe(true);
+    const deadFirstMove = checkAgainstBaseline(report(100, 1000, 1), report(100, 1000));
+    expect(variantCheckOk(deadFirstMove)).toBe(false);
   });
 
   it("baseline に無いボットは skip する", () => {
@@ -202,36 +200,37 @@ describe("sim / evaluate", () => {
   it("評価は盤を変更しない", () => {
     const board = createBoard(10);
     const before = Array.from(board);
-    const shape = getShape("sq2");
-    expect(shape).toBeDefined();
-    if (shape === undefined) return;
-    evaluateMove(board, 10, shape, 3, 3, CONFIG.scoring, 0, 0);
+    const piece = {
+      cells: [
+        [0, 0],
+        [1, 0],
+        [0, 1],
+        [1, 1],
+      ] as const,
+      color: 2 as const,
+    };
+    evaluateMove(board, 10, piece, 3, 3, CONFIG.scoring, 0, 0);
     expect(Array.from(board)).toEqual(before);
   });
 
   it("core の place と同じ得点・消去数になる", () => {
     let state = newGame(CONFIG, "endless", "evaluate-parity", 0);
     for (let m = 0; m < 60 && state.status === "playing"; m++) {
-      const piece = state.tray.find((p) => p !== null);
-      const trayIndex = state.tray.findIndex((p) => p !== null);
-      if (piece === null || piece === undefined) break;
-      const shape = getShape(piece.shapeId);
-      if (shape === undefined) break;
-      const positions = validPositions(state.board, state.size, shape);
+      const positions = validPositions(state.board, state.size, state.piece);
       const target = positions[m % Math.max(positions.length, 1)];
       if (target === undefined) break;
 
       const predicted = evaluateMove(
         state.board,
         state.size,
-        shape,
+        state.piece,
         target[0],
         target[1],
         CONFIG.scoring,
         state.streak,
         countFilled(state.board),
       );
-      const { state: next, result } = place(state, CONFIG, trayIndex, target[0], target[1]);
+      const { state: next, result } = place(state, CONFIG, target[0], target[1]);
       expect(result.ok).toBe(true);
       expect(predicted.score).toBe(result.scoreDelta);
       expect(predicted.lines).toBe(result.clearedRows.length + result.clearedCols.length);
@@ -251,18 +250,22 @@ describe("sim / evaluate", () => {
 });
 
 describe("sim / bots", () => {
-  it("permutations は 3 要素で 6 通り", () => {
-    expect(permutations([1, 2, 3])).toHaveLength(6);
-    expect(permutations([1, 2])).toHaveLength(2);
-    expect(permutations([1])).toHaveLength(1);
-    expect(permutations([])).toEqual([[]]);
+  it("simulate は core と同じ結果になる(盤・消えた本数・次のかけら)", () => {
+    const state = newGame(CONFIG, "endless", "sim-parity", 0);
+    const [x, y] = validPositions(state.board, state.size, state.piece)[0] as [number, number];
+    const simulated = simulate(state, CONFIG, x, y);
+    const { state: next, result } = place(state, CONFIG, x, y);
+    expect(Array.from(simulated.board)).toEqual(Array.from(next.board));
+    expect(simulated.lines).toBe(result.clearedRows.length + result.clearedCols.length);
+    expect(simulated.next).toEqual(next.piece);
+    expect(simulated.heat).toBe(next.heat);
   });
 
-  it("distanceFromCenter は端ほど大きい", () => {
-    const dot = getShape("dot");
-    expect(dot).toBeDefined();
-    if (dot === undefined) return;
-    expect(distanceFromCenter(dot, 0, 0, 10)).toBeGreaterThan(distanceFromCenter(dot, 5, 5, 10));
+  it("valueOf は消せる手を高く評価する", () => {
+    const state = newGame(CONFIG, "endless", "value", 0);
+    const spots = validPositions(state.board, state.size, state.piece);
+    const values = spots.map(([x, y]) => valueOf(state, CONFIG, x, y));
+    expect(values.every((v) => Number.isFinite(v.value))).toBe(true);
   });
 
   it.each(BOTS)("$name は常に合法手を返す", (bot) => {
@@ -272,11 +275,11 @@ describe("sim / bots", () => {
     while (state.status === "playing" && moves < 200) {
       const move = bot.chooseMove(state, CONFIG, rng);
       if (move === null) break;
-      const shape = getShape(state.tray[move.trayIndex]?.shapeId ?? "");
-      expect(shape, `${bot.name}: 空スロットを選んだ`).toBeDefined();
-      if (shape === undefined) break;
-      expect(canPlace(state.board, state.size, shape, move.x, move.y)).toBe(true);
-      state = place(state, CONFIG, move.trayIndex, move.x, move.y).state;
+      expect(
+        canPlace(state.board, state.size, state.piece, move.x, move.y),
+        `${bot.name}: 置けない手を返した`,
+      ).toBe(true);
+      state = place(state, CONFIG, move.x, move.y).state;
       moves++;
     }
     expect(moves).toBeGreaterThan(5);
@@ -289,23 +292,24 @@ describe("sim / bots", () => {
   });
 
   it("中央値スコアの順位が random < greedy < lookahead(docs/07 M2 受け入れ)", () => {
-    const games = 60;
+    // 逆手は上手いボットほどゲームが長い(先読みは中央 370 手)。本数は少なくてよい。
+    const games = 8;
     const scoreOf = (bot: Bot): number => {
       const scores: number[] = [];
       for (let i = 0; i < games; i++) scores.push(playGame(bot, CONFIG, `sim:99:${i}`).score);
       scores.sort((x, y) => x - y);
-      return median(scores);
+      return scores[Math.floor(scores.length / 2)] as number;
     };
-    const r = scoreOf(randomBot);
-    const g = scoreOf(greedyBot);
-    const l = scoreOf(lookaheadBot);
-    expect(r).toBeLessThan(g);
-    expect(g).toBeLessThan(l);
-  });
+    const random = scoreOf(randomBot);
+    const greedy = scoreOf(greedyBot);
+    const lookahead = scoreOf(lookaheadBot);
+    expect(greedy, `random ${random} / greedy ${greedy}`).toBeGreaterThan(random);
+    expect(lookahead, `greedy ${greedy} / lookahead ${lookahead}`).toBeGreaterThan(greedy);
+  }, 120_000);
 
-  it("random は初手ゲームオーバーを起こさない(fitGuarantee: oneOfThree)", () => {
+  it("random は初手ゲームオーバーを起こさない(最初のかけらは必ず 1 マス)", () => {
     for (let i = 0; i < 200; i++) {
-      expect(playGame(randomBot, CONFIG, `sim:1:${i}`).gameOverAtRound1).toBe(false);
+      expect(playGame(randomBot, CONFIG, `sim:1:${i}`).gameOverAtMove1).toBe(false);
     }
   });
 });

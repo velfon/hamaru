@@ -35,9 +35,9 @@ hamaru/
 │   ├── core/                  # ★ 純粋ロジック。DOM 禁止(eslint で import 制限)
 │   │   ├── types.ts
 │   │   ├── rng.ts             # cyrb53 + mulberry32
-│   │   ├── shapes.ts          # 形状カタログ
-│   │   ├── board.ts           # canPlace / clearLines / anyFits
-│   │   ├── tray.ts            # generateTray
+│   │   ├── piece.ts           # かけらの正規化・連結・リサイズ
+│   │   ├── derive.ts          # ★ 次のかけらを盤から導く(逆手の心臓部)
+│   │   ├── board.ts           # canPlace / clearLines / pieceFits
 │   │   ├── scoring.ts
 │   │   ├── game.ts            # newGame / place / serialize
 │   │   └── daily.ts           # 日付→シード、通算番号
@@ -51,7 +51,7 @@ hamaru/
 │   │   ├── store.ts           # 小さな observable ストア
 │   │   ├── screens/{home,game,settings,about}.ts
 │   │   ├── board-view.ts      # 盤の描画・差分更新
-│   │   ├── tray-view.ts
+│   │   ├── hand-view.ts      # 手持ち 1 個 + 熱
 │   │   ├── drag.ts            # ポインタ入力
 │   │   ├── keyboard.ts
 │   │   ├── fx.ts              # 演出(吸着・金継ぎ消去・全消し)
@@ -117,27 +117,30 @@ core は何も import しない(型と自身のみ)。ui は worker を import �
 // types.ts
 export type Cell = 0 | 1 | 2 | 3 | 4 | 5 | 6;
 export type Board = Uint8Array;                 // size*size
-export interface Shape { id: string; cells: ReadonlyArray<readonly [number, number]>; w: number; h: number; color: Cell; }
-export interface Piece { shapeId: string; }
-export type Mode = "endless" | "daily";
-export type Status = "playing" | "over";
+export type Color = 1 | 2 | 3 | 4 | 5 | 6;
+export type CellOffset = readonly [number, number];
+/** かけら。形は盤から導かれるので、カタログも ID も無い。cells は正規化済み。 */
+export interface Piece { readonly cells: ReadonlyArray<CellOffset>; readonly color: Color; }
+export type Mode = "endless" | "daily" | "level";
+export type Status = "playing" | "over" | "cleared";
+export interface LevelInfo { readonly no: number; readonly goal: number; readonly moveLimit: number; }
 
 export interface GameState {
-  readonly version: 1;
+  readonly version: 2;                           // 2 = 逆手。1 は旧ルール(はめ込み)
   readonly mode: Mode;
   readonly seed: string;
-  readonly rng: number;                          // mulberry32 の内部状態
   readonly size: number;
   readonly board: Board;
-  readonly tray: ReadonlyArray<Piece | null>;    // 長さ 3
+  readonly piece: Piece;                         // 手持ちは常に 1 個
+  readonly heat: number;                         // 最後に消してからの手数
   readonly score: number;
   readonly streak: number;
   readonly longestStreak: number;
-  readonly round: number;
   readonly moves: number;
   readonly linesCleared: number;
   readonly status: Status;
   readonly startedAt: number;                    // epoch ms(演出・統計用。ロジックには使わない)
+  readonly level?: LevelInfo;
 }
 
 export interface PlaceResult {
@@ -149,25 +152,41 @@ export interface PlaceResult {
   scoreDelta: number;
   streakAfter: number;
   boardCleared: boolean;
-  newTray: boolean;
+  heatAfter: number;                             // この手のあとの熱
+  nextPiece: Piece;                              // 次に配られるかけら
   gameOver: boolean;
+  levelCleared?: boolean;
+  outOfMoves?: boolean;
 }
 
 // game.ts
 export function newGame(config: ResolvedConfig, mode: Mode, seed: string, now: number): GameState;
-export function place(state: GameState, config: ResolvedConfig, trayIndex: number, x: number, y: number): { state: GameState; result: PlaceResult };
+export function place(state: GameState, config: ResolvedConfig, x: number, y: number): { state: GameState; result: PlaceResult };
+export function nextPieceSize(state: GameState, config: ResolvedConfig): number;
 export function serialize(state: GameState): string;       // JSON(board は base64)
 export function deserialize(s: string): GameState | null;  // 壊れていれば null
 
+// derive.ts ― 逆手の心臓部(乱数ゼロ。docs/01 §5.3)
+export function pieceSizeFor(heat: number, cfg: SakateConfig): number;
+export function colorFor(moves: number): Color;
+export function deriveNextPiece(board: Board, size: number, placed: ReadonlyArray<readonly [number, number]>, heat: number, cfg: SakateConfig, moves: number): Piece;
+
+// piece.ts
+export function normalize(cells: ReadonlyArray<CellOffset>): CellOffset[];
+export function largestGroup(cells: ReadonlyArray<CellOffset>): CellOffset[];
+export function resize(cells: ReadonlyArray<CellOffset>, size: number): CellOffset[];
+
 // board.ts
-export function canPlace(board: Board, size: number, shape: Shape, x: number, y: number): boolean;
-export function anyFits(board: Board, size: number, tray: ReadonlyArray<Piece | null>): boolean;
-export function validPositions(board: Board, size: number, shape: Shape): Array<[number, number]>;
+export function canPlace(board: Board, size: number, piece: Piece, x: number, y: number): boolean;
+export function pieceFits(board: Board, size: number, piece: Piece): boolean;
+export function validPositions(board: Board, size: number, piece: Piece): Array<[number, number]>;
 export function fillRatio(board: Board): number;
 ```
 
 - **純粋関数**: `place` は新しい `GameState` を返し、引数を変更しない(`board` は copy-on-write)。
 - **決定性**: 同じ `(config, seed, 操作列)` から同じ状態になる。デイリーの根幹であり、テスト `determinism.test.ts` で担保。
+  **逆手では乱数を使うのが `startBoard` だけ**なので、`GameState` は rng の状態を持たない。
+  途中再開しても列がずれず、サーバは手の列 `[[x, y], …]` だけで得点を再生できる(docs/08 §4)。
 - **時間非依存**: `Date.now()` を core で呼ばない。`now` は引数で渡す。
 
 ## 4. 設定と実験の解決(`src/config`)
@@ -177,12 +196,7 @@ export function fillRatio(board: Board): number;
 {
   "schemaVersion": 1,
   "board": { "size": 10 },
-  "pieces": {
-    "weights": { "dot": 1.0, "h2": 1.0, "...": 0 },
-    "noTripleDuplicate": true,
-    "fitGuarantee": "oneOfThree",
-    "pity": { "enabled": true, "threshold": 0.6, "smallBoost": 1.5 }
-  },
+  "sakate": { "maxPiece": 5, "growEvery": 2, "window": 3, "startTiles": 6 },
   "scoring": { "perCell": 1, "lineBase": 10, "streak": { "step": 0.25, "max": 2.0 }, "boardClearBonus": 300 },
   "input": { "touchLiftOffset": 70, "previewClears": true },
   "daily": { "epoch": "2026-10-01", "shareGaugeMax": 6000 },
@@ -191,7 +205,7 @@ export function fillRatio(board: Board): number;
   "levels": { "goalBase": 3, "...": 0 }
 }
 ```
-zod スキーマ(`schema.ts`)で **範囲制約**を付ける(例: `threshold` は 0〜1、`weights` の各値は 0〜5、`size` は 6〜12)。**範囲外はビルド失敗**。これは改善エージェントの暴走に対する第一の物理的な壁。
+zod スキーマ(`schema.ts`)で **範囲制約**を付ける(例: `maxPiece` は 1〜9、`growEvery` は 1〜10、`window` は 3 か 5、`startTiles` は 0〜40、`size` は 6〜12)。**範囲外はビルド失敗**。これは改善エージェントの暴走に対する第一の物理的な壁。
 
 ### 4.2 `experiments.json`
 ```jsonc
@@ -202,7 +216,7 @@ zod スキーマ(`schema.ts`)で **範囲制約**を付ける(例: `threshold` �
       "id": "EXP-0003",
       "status": "running",                       // draft | running | concluded
       "startedAt": "2026-10-12T00:00:00Z",
-      "hypothesis": "pity.threshold を 0.6→0.5 にすると 1 ゲームの長さが伸び、games/session が増える",
+      "hypothesis": "sakate.growEvery を 2→3 にすると 1 ゲームの長さが伸び、games/session が増える",
       "primaryMetric": "games_per_session",       // 04 のメトリクス ID
       "guardrails": ["crash_free", "median_game_seconds_min_120"],
       "minUsersPerArm": 300,
@@ -210,7 +224,7 @@ zod スキーマ(`schema.ts`)で **範囲制約**を付ける(例: `threshold` �
       "allocation": { "control": 0.5, "treatment": 0.5 },
       "variants": {
         "control": {},
-        "treatment": { "pieces": { "pity": { "threshold": 0.5 } } }   // config への deep-merge
+        "treatment": { "sakate": { "growEvery": 3 } }                // config への deep-merge
       },
       "lockedInDaily": true                      // デイリーではオーバーライドを適用しない
     }
@@ -225,7 +239,8 @@ zod スキーマ(`schema.ts`)で **範囲制約**を付ける(例: `threshold` �
 ### 4.4 解決 `resolveConfig(base, experiments, installId, mode) → ResolvedConfig`
 1. base を deep-clone。
 2. `running` の実験があれば割り当てバリアントのオーバーライドを deep-merge(`mode === "daily"` かつ `lockedInDaily` なら無視)。
-3. `mode === "daily"` なら §01-4.2 の強制(`fitGuarantee: "none"`, `pity.enabled: false`)。
+3. `mode === "daily"` は追加の強制なし。逆手は盤の状態に依存する供給規則を持たないので、
+   `lockedInDaily` で実験を外すだけで全プレイヤーの展開が一致する(`forceDaily` は恒等関数)。
 4. スキーマで再検証。失敗なら base にフォールバックし `error` イベントを送る。
 
 ## 5. UI 層

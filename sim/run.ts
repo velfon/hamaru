@@ -146,11 +146,9 @@ export function playGame(bot: Bot, config: ResolvedConfig, gameSeed: string): Ga
   for (let m = 0; m < MAX_MOVES && state.status === "playing"; m++) {
     const move = bot.chooseMove(state, config, botRng);
     if (move === null) break;
-    const { state: next, result } = place(state, config, move.trayIndex, move.x, move.y);
+    const { state: next, result } = place(state, config, move.x, move.y);
     if (!result.ok) {
-      throw new Error(
-        `${bot.name}: 不正な手 tray=${move.trayIndex} (${move.x},${move.y}) seed=${gameSeed}`,
-      );
+      throw new Error(`${bot.name}: 不正な手 (${move.x},${move.y}) seed=${gameSeed}`);
     }
     if (result.boardCleared) boardClear = true;
     state = next;
@@ -160,9 +158,9 @@ export function playGame(bot: Bot, config: ResolvedConfig, gameSeed: string): Ga
     moves: state.moves,
     score: state.score,
     lines: state.linesCleared,
-    round: state.round,
-    // 1 ラウンド目のまま終わった = 最初のトレイを置き切れずに詰んだ。
-    gameOverAtRound1: state.round === 1,
+    // 終わったときの熱(= かけらがどこまで育ったか。逆手の「追い詰められ具合」)。
+    heat: state.heat,
+    gameOverAtMove1: state.moves === 0,
     boardClear,
   };
 }
@@ -227,8 +225,7 @@ function main(argv: readonly string[]): number {
     console.log("\n" + formatCheck(result));
     if (options.variant !== null) {
       // 実験の treatment は帯域外でもよい。明らかな破壊だけを落とす(docs/06 §4)。
-      const config = applyVariant(loadGameConfig(options.configPath), options.variant);
-      const ok = variantCheckOk(result, config.pieces.fitGuarantee);
+      const ok = variantCheckOk(result);
       console.log(
         ok
           ? `variant "${options.variant}": 明らかな破壊なし(帯域外は PR 本文に理由を書く)`

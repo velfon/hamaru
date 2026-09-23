@@ -32,7 +32,7 @@ export interface SfxContext {
   lines?: number;
   /** 連鎖の回数(0 から)。上がるほど音が高くなる。 */
   streak?: number;
-  /** 置いたピースのセル数(1〜9)。置く音の高さに少しだけ効く。 */
+  /** 置いたかけらのセル数(1〜9)。置く音の高さに少しだけ効く。 */
   cells?: number;
 }
 
@@ -58,7 +58,7 @@ export function sfxNotes(name: SfxName, ctx: SfxContext = {}): SfxNote[] {
 
   switch (name) {
     case "place": {
-      // 陶器を置く「コッ」。大きいピースほど少し低く、どれも 80 ms で消える。
+      // 陶器を置く「コッ」。大きいかけらほど少し低く、どれも 80 ms で消える。
       const cells = Math.min(9, Math.max(1, Math.floor(ctx.cells ?? 1)));
       const step = Math.max(0, 3 - Math.floor((cells - 1) / 2));
       return [at(ladder(step), 0, 0.08, 0.22, "click")];

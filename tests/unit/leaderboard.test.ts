@@ -87,8 +87,8 @@ function play(installId: string, date: string, bot: Bot): { moves: Move[]; score
   while (state.status === "playing") {
     const m = bot.chooseMove(state, config, rng);
     if (m === null) break;
-    moves.push([m.trayIndex, m.x, m.y]);
-    state = place(state, config, m.trayIndex, m.x, m.y).state;
+    moves.push([m.x, m.y]);
+    state = place(state, config, m.x, m.y).state;
   }
   return { moves, score: state.score };
 }
@@ -193,7 +193,7 @@ describe("POST /api/daily/submit", () => {
       .bind(TODAY, await sha256Hex(A), NOW, MAX_ATTEMPTS_PER_DAY)
       .run();
     // 再生すれば必ず 422 になる出鱈目な手。先に上限で切っていれば 429 が返る
-    const garbage: Move[] = Array.from({ length: 2000 }, () => [0, 0, 0] as Move);
+    const garbage: Move[] = Array.from({ length: 2000 }, () => [0, 0] as Move);
     const r = await submit(A, TODAY, garbage);
     expect(r.status).toBe(429);
     expect(r.body["error"]).toBe("too_many_attempts");
@@ -286,13 +286,13 @@ describe("POST /api/daily/submit", () => {
 
   it("不正な手は 422、途中で終わった手の列は 400", async () => {
     const g = play(A, TODAY, greedyBot);
-    const broken = g.moves.map((m, i) => (i === 3 ? ([m[0], 11, 11] as Move) : m));
+    const broken = g.moves.map((m, i) => (i === 3 ? ([11, 11] as Move) : m));
     const bad = await submit(A, TODAY, broken);
     expect(bad.status).toBe(422);
     expect(bad.body["error"]).toBe("invalid_move");
     const partial = await submit(A, TODAY, g.moves.slice(0, 5));
     expect(partial.body).toEqual({ error: "not_finished" });
-    const extra = await submit(A, TODAY, [...g.moves, [0, 0, 0]]);
+    const extra = await submit(A, TODAY, [...g.moves, [0, 0]]);
     expect(extra.body["error"]).toBe("moves_after_end");
   });
 

@@ -107,12 +107,8 @@ export function parseBatch(
 export const PERIODS = ["daily", "week", "month", "all"] as const;
 export type Period = (typeof PERIODS)[number];
 
-/** 1 手 = [トレイの位置 0〜2, x, y]。盤は最大 12×12(config の上限)なので座標は 0〜11。 */
-const move = z.tuple([
-  z.number().int().min(0).max(2),
-  z.number().int().min(0).max(11),
-  z.number().int().min(0).max(11),
-]);
+/** 1 手 = [x, y](逆手は手持ちが 1 個)。盤は最大 12×12(config の上限)なので座標は 0〜11。 */
+const move = z.tuple([z.number().int().min(0).max(11), z.number().int().min(0).max(11)]);
 
 export const submitSchema = z.strictObject({
   installId: z.uuid(),
