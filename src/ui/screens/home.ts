@@ -15,6 +15,7 @@ import { deserialize } from "../../core/game";
 import { msUntilNextUtcDay, utcDateString } from "../../core/daily";
 import { formatCountdown, formatDate, formatNumber, t } from "../../i18n";
 import {
+  hasSeenHowto,
   KEYS,
   loadDailyResults,
   loadLevelProgress,
@@ -30,6 +31,20 @@ import { createSoundControl } from "../sound";
 import { statsStore } from "../store";
 
 const MINUTE = 60_000;
+
+/**
+ * 遊び始める前に、いちばん最初の 1 回だけ遊び方を挟む(docs/01 §9.7)。
+ *
+ * ルート(`#/play`)ではなく**ホームのボタン**で挟む。ルートで挟むと、`#/play` を直接
+ * 開いた人(ブックマーク・共有リンク・Lighthouse)まで毎回そちらへ流れてしまい、
+ * ゲーム画面そのものの表示速度が測れなくなる(docs/06 §9 N-11)。
+ * アプリは `/` から始まるので、実際にはほぼ全員がここを通る。
+ */
+function go(path: string): void {
+  const first = !hasSeenHowto() && statsStore.get().gamesPlayed === 0;
+  // 行き先を渡して、遊び方の「はじめる」から押した先へ戻れるようにする。
+  navigate(first ? `/howto?next=${encodeURIComponent(path)}` : path);
+}
 
 export function homeScreen(container: HTMLElement): Screen {
   const stats = statsStore.get();
@@ -87,7 +102,7 @@ export function homeScreen(container: HTMLElement): Screen {
       label: dailyButtonLabel,
       variant: "primary",
       testId: "daily-play",
-      onClick: () => navigate("/daily"),
+      onClick: () => go("/daily"),
     }),
     el("div", { class: "card__meta card__meta--split" }, [
       countdown,
@@ -114,14 +129,14 @@ export function homeScreen(container: HTMLElement): Screen {
       label: endlessInProgress ? t("home.resume") : t("home.play"),
       variant: "primary",
       testId: "endless-play",
-      onClick: () => navigate("/play"),
+      onClick: () => go("/play"),
     }),
     endlessInProgress
       ? button({
           label: t("home.restart"),
           variant: "secondary",
           testId: "endless-restart",
-          onClick: () => navigate("/play?new=1"),
+          onClick: () => go("/play?new=1"),
         })
       : null,
   ]);
@@ -135,7 +150,7 @@ export function homeScreen(container: HTMLElement): Screen {
     }),
     variant: "secondary",
     testId: "levels-link",
-    onClick: () => navigate("/levels"),
+    onClick: () => go("/levels"),
   });
   actions.appendChild(levelsButton);
 

@@ -9,6 +9,8 @@
  * ルールを変えたときに見本だけが古くなることが起きない。
  *
  * 文言は初回 JS に載せず、開いた時に読み込む(about と同じ。docs/02 §11 N-15)。
+ * **この 14 キーを常時読み込みに入れると、ホームもゲームも LCP が 1.39 → 1.54 秒に落ちる**
+ * (シミュレート回線の往復境界をまたぐ。docs/06 §9 N-11)。
  */
 import { DEFAULT_CONFIG } from "../../config";
 import { validPositions } from "../../core/board";
@@ -86,7 +88,7 @@ function countWindowTiles(
   return n;
 }
 
-function render(container: HTMLElement): void {
+function render(container: HTMLElement, next: string): void {
   let state = startState();
 
   /* 窯(見本) --------------------------------------------------------- */
@@ -288,18 +290,22 @@ function render(container: HTMLElement): void {
       testId: "howto-start",
       onClick: () => {
         markHowtoSeen();
-        navigate("/play");
+        navigate(next);
       },
     }),
   ]);
   container.replaceChildren(screen);
 }
 
-export function howtoScreen(container: HTMLElement): Screen {
-  let unmounted = false;
-  // 見出しを出しておく。文言が届いたら中身に入れ替わる(about と同じ)。
-  container.appendChild(el("div", { class: "screen howto", "data-testid": "howto-screen" }));
+export function howtoScreen(container: HTMLElement, query: URLSearchParams): Screen {
+  // 開いた時点で「見た」とする(§9.7 の自動導線は 1 回だけ)。
   markHowtoSeen();
+  // 行き先はホームが渡す。アプリ内のパスだけを受け取る(外部 URL へ飛ばさない)。
+  const raw = query.get("next") ?? "/play";
+  const next = raw.startsWith("/") && !raw.startsWith("//") ? raw : "/play";
+  let unmounted = false;
+  // 文言が届くまでは空の枠(ほぼ一瞬で入れ替わる)。
+  container.appendChild(el("div", { class: "screen howto", "data-testid": "howto-screen" }));
   const lang = getLang();
   const loading =
     lang === "ja" ? import("../../i18n/howto.ja.json") : import("../../i18n/howto.en.json");
@@ -307,7 +313,7 @@ export function howtoScreen(container: HTMLElement): Screen {
     (file) => {
       if (unmounted) return;
       addMessages(lang, file.default);
-      render(container);
+      render(container, next);
     },
     () => {
       /* 版の入れ替え直後など。開き直せば読み込み直す */

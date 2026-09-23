@@ -41,14 +41,17 @@ test("おまかせで 1 手 / はじめから(キーボードでも同じこと�
   await expect(page.getByTestId("howto-caption")).toHaveText(before ?? "");
 });
 
-test("いちばん最初にゲームへ入るときだけ、遊び方を挟む", async ({ page }) => {
+test("いちばん最初にゲームへ入るときだけ、遊び方を挟む(押した先へ戻る)", async ({ page }) => {
   await firstRun(page);
   await page.goto("/");
-  await page.getByTestId("endless-play").click();
+  // 今日の挑戦を押しても遊び方へ寄り道し、「はじめる」でその行き先へ戻る。
+  await page.getByTestId("daily-play").click();
   await expect(page.getByTestId("howto-screen")).toBeVisible();
+  expect(page.url()).toContain("next=");
 
   await page.getByTestId("howto-start").click();
   await expect(page.getByTestId("board")).toBeVisible();
+  await expect(page.getByTestId("modetag")).toContainText("challenge");
 
   // 2 回目からは挟まらない(firstRun の init script は読み込みのたびに印を消すので、
   // ここはリロードせずアプリ内の遷移で戻る)。
@@ -56,4 +59,13 @@ test("いちばん最初にゲームへ入るときだけ、遊び方を挟む",
   await expect(page.getByTestId("home-screen")).toBeVisible();
   await page.getByTestId("endless-play").click();
   await expect(page.getByTestId("board")).toBeVisible();
+});
+
+test("`#/play` を直接開いた人は素通しする(ゲーム画面の表示速度を測れるように)", async ({
+  page,
+}) => {
+  await firstRun(page);
+  await page.goto("/#/play");
+  await expect(page.getByTestId("board")).toBeVisible();
+  await expect(page.getByTestId("howto-screen")).toHaveCount(0);
 });

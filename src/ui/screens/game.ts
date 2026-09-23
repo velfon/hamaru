@@ -13,7 +13,6 @@ import { resolveConfig, DEFAULT_CONFIG, DEFAULT_EXPERIMENTS } from "../../config
 import { formatNumber, t } from "../../i18n";
 import {
   KEYS,
-  hasSeenHowto,
   loadSavedGame,
   remove,
   saveDailyResult,
@@ -183,12 +182,6 @@ function startGame(mode: Mode, query: URLSearchParams, config: ResolvedConfig): 
 
 export function gameScreen(mode: Mode) {
   return (container: HTMLElement, query: URLSearchParams): Screen => {
-    // 逆手のルールは見ないと分からないので、**いちばん最初の 1 回だけ**遊び方を挟む
-    // (docs/01 §9.7)。以後は自分から開いたときだけ出る。
-    if (!hasSeenHowto() && statsStore.get().gamesPlayed === 0) {
-      navigate("/howto");
-      return { unmount() {} };
-    }
     const ctx = getContext();
     const config =
       mode === "daily"

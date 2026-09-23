@@ -20,7 +20,6 @@ import { DEFAULT_CONFIG, LEVELS_TABLE } from "../../config";
 import { formatNumber, t } from "../../i18n";
 import {
   KEYS,
-  hasSeenHowto,
   loadLevelProgress,
   loadSavedGame,
   remove,
@@ -38,7 +37,7 @@ import { boardClearFx, clearFx, dropFx, gameOverDelay, renderNumber, vibrate } f
 import { createKeyboard } from "../keyboard";
 import { createSoundControl } from "../sound";
 import { navigate, type Screen } from "../router";
-import { langStore, settingsStore, statsStore } from "../store";
+import { langStore, settingsStore } from "../store";
 import { createHandView } from "../hand-view";
 import { seededState } from "./game";
 
@@ -88,11 +87,6 @@ export function starsView(stars: number, testId?: string): HTMLElement {
 }
 
 export function levelScreen(container: HTMLElement, query: URLSearchParams): Screen {
-  // ゲーム画面へ入るのが初めてなら、まず遊び方を挟む(docs/01 §9.7)。
-  if (!hasSeenHowto() && statsStore.get().gamesPlayed === 0) {
-    navigate("/howto");
-    return { unmount() {} };
-  }
   // 開発ビルドの E2E 専用(`?state=`)。本番では常に null。
   const seeded = seededState();
   if (seeded !== null && seeded.mode === "level" && seeded.level !== undefined) {
