@@ -89,7 +89,7 @@ export function rankingScreen(container: HTMLElement, query: URLSearchParams): S
         testId: "back",
         onClick: () => navigate("/"),
       }),
-      el("h1", { class: "topbar__title", style: "font-size:20px" }, [t("ranking.title")]),
+      el("h1", { class: "topbar__title topbar__title--sub" }, [t("ranking.title")]),
       el("div", { class: "topbar__spacer" }),
     ]),
     tabs,

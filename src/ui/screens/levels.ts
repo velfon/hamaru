@@ -53,7 +53,7 @@ export function levelsScreen(container: HTMLElement): Screen {
           testId: "back",
           onClick: () => navigate("/"),
         }),
-        el("h1", { class: "topbar__title", style: "font-size:20px" }, [t("levels.title")]),
+        el("h1", { class: "topbar__title topbar__title--sub" }, [t("levels.title")]),
         el("div", { class: "topbar__spacer" }),
       ]),
       el("p", { class: "ranking__note" }, [t("levels.hint")]),

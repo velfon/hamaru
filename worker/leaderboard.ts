@@ -77,10 +77,15 @@ export async function sha256Hex(s: string): Promise<string> {
   return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
-/** POST の共通前処理: Origin 検査 → 本文の大きさ → JSON。 */
+/**
+ * POST の共通前処理: Origin 検査 → 本文の大きさ → JSON。
+ * 大きさは **読む前に** Content-Length で弾く(巨大な本文をメモリに載せない。docs/02 §10)。
+ */
 async function readJson(request: Request, maxBytes: number): Promise<unknown | Response> {
   if (request.method !== "POST") return problem(405, "method");
   if (!isSameOrigin(request)) return problem(403, "origin");
+  const declared = request.headers.get("content-length");
+  if (declared !== null && Number(declared) > maxBytes) return problem(413, "too_large");
   const text = await request.text();
   if (new TextEncoder().encode(text).length > maxBytes) return problem(413, "too_large");
   try {
@@ -219,13 +224,28 @@ export async function handleSubmit(
   const yesterday = utcDateString(now - DAY);
   if (date !== today && date !== yesterday) return problem(400, "date");
 
+  const player = await sha256Hex(installId);
+
+  // 再生(最大 2000 手)は CPU を使う。その日の上限に達していないかを**先に**見る
+  // (上限に達した相手に再生をやらせない。docs/02 §10)。
+  const previous =
+    env.LEADERBOARD === "off"
+      ? null
+      : await env.DB.prepare(
+          `SELECT score, attempts FROM daily_scores WHERE date = ?1 AND player = ?2`,
+        )
+          .bind(date, player)
+          .first<{ score: number; attempts: number }>();
+  if (previous !== null && previous.attempts >= MAX_ATTEMPTS_PER_DAY) {
+    return problem(429, "too_many_attempts", { best: previous.score, attempts: previous.attempts });
+  }
+
   const config = resolveConfig(DEFAULT_CONFIG, DEFAULT_EXPERIMENTS, installId, "daily");
   const result = replay(config, "daily", dailySeed(date), moves as Move[]);
   if (!result.ok) return problem(422, result.error, { at: result.at });
   const { state } = result;
   if (state.status !== "over") return problem(400, "not_finished");
 
-  const player = await sha256Hex(installId);
   if (env.LEADERBOARD === "off") {
     return json({
       accepted: false,
@@ -241,16 +261,6 @@ export async function handleSubmit(
 
   // 何度でも挑戦できる。送信のたびに attempts を数え、**より高い時だけ**記録を差し替える。
   // 合計(totals)は「今回の得点 − それまでのその日のベスト」だけ足す(docs/08 §2)。
-  const previous = await env.DB.prepare(
-    `SELECT score, attempts FROM daily_scores WHERE date = ?1 AND player = ?2`,
-  )
-    .bind(date, player)
-    .first<{ score: number; attempts: number }>();
-
-  if (previous !== null && previous.attempts >= MAX_ATTEMPTS_PER_DAY) {
-    return problem(429, "too_many_attempts", { best: previous.score, attempts: previous.attempts });
-  }
-
   const submissionId = crypto.randomUUID();
   const periods = ["week", "month", "all"] as const;
   // 1. その日の初めての記録なら、合計に丸ごと足して日数を 1 増やす

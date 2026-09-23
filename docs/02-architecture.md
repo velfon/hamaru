@@ -333,11 +333,41 @@ npm run deploy  = wrangler deploy --var APP_VERSION:$GIT_SHA
 
 ## 10. セキュリティとプライバシー
 
-- API は同一オリジンのみ。認証なし(書き込み専用・匿名)。
-- `installId` はクライアント生成 UUID v4。サーバは検証のみ(形式)。
+### 10.1 配信ヘッダ(`public/_headers`)
+2026-09-23 の点検で強めた。単体テスト(`tests/unit/scripts-contract.test.ts`)が内容を固定する。
+
+| ヘッダ | 値 | 何を止めるか |
+|---|---|---|
+| Content-Security-Policy | `default-src 'self'` + `script-src`/`style-src`/`img-src`/`connect-src`/`font-src`/`manifest-src`/`worker-src` すべて `'self'`、`base-uri 'none'`、`form-action 'none'`、`frame-ancestors 'none'`、`object-src 'none'` | 外部スクリプト・インライン・`<base>` の差し替え・フォーム送信・埋め込み |
+| X-Frame-Options | `DENY` | 古いブラウザでの埋め込み(クリックジャッキング) |
+| Cross-Origin-Opener-Policy | `same-origin` | 別オリジンの窓からの参照(タブナビング・XS-Leaks) |
+| Cross-Origin-Resource-Policy | `same-origin` | 他サイトからの資産の読み込み |
+| Strict-Transport-Security | `max-age=31536000` | 平文への降格。`includeSubDomains` は他のサブドメインを巻き込むので付けない |
+| X-Content-Type-Options / Referrer-Policy / Permissions-Policy | `nosniff` / `strict-origin-when-cross-origin` / カメラ・マイク・位置・決済などすべて `()` | MIME 推測・参照元の漏れ・端末機能 |
+
+**`'unsafe-inline'` は style からも外した**。そのため `style` 属性は使わない(`el()` に `style:` を渡さない)。
+色や寸法は CSS のクラスか、CSSOM(`node.style.setProperty`)で入れる。CSSOM は CSP の対象外。
+
+### 10.2 API
+- 同一オリジンのみ(`Origin` 検査)。認証なし(匿名・書き込み専用)。Cookie を使わないので CSRF の的がない。
+- `installId` はクライアント生成の UUID v4。**これを知っている人はその人として書ける/消せる**(匿名設計の代償。docs/08 §3)。
+  API は installId も player(SHA-256)も返さない。
+- 本文の大きさは**読む前に** `Content-Length` で弾く(events 16 KB / ランキング 32 KB・1 KB)。
+- `/api/daily/submit` は最大 2000 手を再生する。**その日の上限(50 回)を再生の前に見る**ので、
+  上限に達した相手に CPU を使わせない。
 - AE には IP を書かない。国コードのみ。
-- 依存は `npm audit --audit-level=high` を CI で実行。
+
+### 10.3 残っている risk(受け入れているもの)
+- **回数制限が無い**: installId を作り直せば、誰でも何度でも投稿できる。ボットが上位を埋める可能性と、
+  無料枠(D1 の書き込み 10 万行/日、AE の書き込み)を使い切らせる可能性が残る。
+  実際に起きたら **Cloudflare のダッシュボードで Rate limiting rules**(`/api/*` に IP あたり毎分 N 回)を入れる。
+  人間の作業なので docs/07 §5 の H 系タスクと同じ扱い。
+- ニックネームの監視は自動化していない(docs/08 §5.2 の手順で人間が消す)。
+
+### 10.4 供給網
+- 依存は `npm audit --audit-level=high` を CI で実行(G8)。本番の依存は 2 つだけ(`web-vitals`, `zod`)。
 - 改善エージェントは `worker/`, `.github/`, `package.json` を**変更できない**(05 のポリシー + CI の変更パス検査)。
+- ワークフローは `pull_request_target` を使わない(fork の PR にシークレットを渡さない)。
 
 ## 11. 実装ノート(実装フェーズで解消した曖昧さ)
 
