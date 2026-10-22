@@ -35,6 +35,7 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version-file: .nvmrc
+          check-latest: true
           cache: npm
       - run: npm ci
       # daily が前日までに書いた metrics(main にマージ済み)から草稿を作る。当日分が無ければ直近の日で作る。
