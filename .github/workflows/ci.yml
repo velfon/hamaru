@@ -38,6 +38,7 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version-file: .nvmrc
+          check-latest: true
           cache: npm
       - run: npm ci
       # G1: config 検証(全実験 × 全バリアント × 両モード)・型・lint・i18n・整形
@@ -53,6 +54,7 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version-file: .nvmrc
+          check-latest: true
           cache: npm
       - run: npm ci
       # G2: 単体テスト + src/core の行カバレッジ 95 %
@@ -67,6 +69,7 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version-file: .nvmrc
+          check-latest: true
           cache: npm
       - run: npm ci
       # G3: 決定性(デイリーの公平性)。golden の更新は「golden: update」ラベル付き PR のみ(G7 が検査)
@@ -81,6 +84,7 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version-file: .nvmrc
+          check-latest: true
           cache: npm
       - run: npm ci
       # G4: 既定 config で帯域検査。逆手は先読みが本当に効くぶん lookahead が長い
@@ -114,6 +118,7 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version-file: .nvmrc
+          check-latest: true
           cache: npm
       - run: npm ci
       - run: npx playwright install --with-deps chromium
@@ -137,6 +142,7 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version-file: .nvmrc
+          check-latest: true
           cache: npm
       - run: npm ci
       # G6: サイズ予算 + Lighthouse CI(モバイル perf / a11y ≥ 0.95、LCP ≤ 1.5 秒)
@@ -161,6 +167,7 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version-file: .nvmrc
+          check-latest: true
           cache: npm
       - run: npm ci
       # G7: 変更クラス。PR ではラベルと作者を読み、改善エージェントの human-only 変更等を落とす。
@@ -184,6 +191,7 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version-file: .nvmrc
+          check-latest: true
           cache: npm
       # G8: 依存の脆弱性(high 以上で失敗)
       - run: npm audit --audit-level=high
@@ -202,6 +210,7 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version-file: .nvmrc
+          check-latest: true
           cache: npm
       - name: check secrets
         id: secrets
